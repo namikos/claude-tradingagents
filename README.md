@@ -55,7 +55,7 @@ can audit every step.
 ### 1. Add the marketplace and install
 
 ```text
-/plugin marketplace add namikos/tradingagents
+/plugin marketplace add namikos/claude-tradingagents
 /plugin install tradingagents@namikos-tradingagents
 ```
 

@@ -6,8 +6,8 @@
     "name": "namikos",
     "url": "https://github.com/namikos"
   },
-  "homepage": "https://github.com/namikos/tradingagents",
-  "repository": "https://github.com/namikos/tradingagents",
+  "homepage": "https://github.com/namikos/claude-tradingagents",
+  "repository": "https://github.com/namikos/claude-tradingagents",
   "license": "Apache-2.0",
   "keywords": [
     "trading",

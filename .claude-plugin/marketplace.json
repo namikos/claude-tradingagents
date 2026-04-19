@@ -18,7 +18,7 @@
         "name": "namikos",
         "url": "https://github.com/namikos"
       },
-      "homepage": "https://github.com/namikos/tradingagents",
+      "homepage": "https://github.com/namikos/claude-tradingagents",
       "license": "Apache-2.0",
       "category": "finance",
       "keywords": ["trading", "stocks", "research", "agent-teams", "alpha-vantage"],

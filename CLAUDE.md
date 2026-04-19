@@ -79,7 +79,7 @@ Native Claude Code tools. News + Sentiment analysts use them for breaking headli
 ## Setup
 
 End users (plugin install):
-1. `/plugin marketplace add namikos/tradingagents`
+1. `/plugin marketplace add namikos/claude-tradingagents`
 2. `/plugin install tradingagents@namikos-tradingagents`
 3. Claude Code prompts for the Alpha Vantage API key (free at https://www.alphavantage.co/support/#api-key) and stores it via `userConfig` (sensitive → OS keychain).
 4. Make sure `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set in your Claude Code settings.
