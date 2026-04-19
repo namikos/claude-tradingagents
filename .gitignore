@@ -24,3 +24,9 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+
+# Next.js dashboard build artifacts (lockfile is committed for reproducibility)
+app/node_modules/
+app/.next/
+app/out/
+app/.turbo/

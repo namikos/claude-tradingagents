@@ -40,5 +40,25 @@ End the report with:
 
 1. A Markdown summary table with the key metrics (column headers: Metric | Value | Signal [+/-/neutral] | Note)
 2. The literal line: `FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**`
+3. The JSON Signal Footer (see below)
 
 Be specific and evidence-based. Don't hedge with vague platitudes like "the company has strengths and weaknesses" — pick a direction and justify it with the numbers you pulled.
+
+## Mandatory: JSON Signal Footer
+
+Your output Markdown file MUST end with a fenced JSON block conforming exactly to this schema (no extra commentary after it):
+
+````
+```json
+{
+  "agent": "fundamentals-analyst",
+  "signal": "bullish" | "bearish" | "neutral",
+  "confidence": 0-100,
+  "horizon": "1-3mo" | "3-6mo" | "6-12mo" | "1-3yr",
+  "key_points": ["...", "..."],
+  "key_risks": ["...", "..."]
+}
+```
+````
+
+This footer is the source of truth for the trader's weighted aggregation. The qualitative Markdown analysis above it is for human readers; this JSON is parsed programmatically. Pick exactly one value for `signal` and `horizon`; emit between 2 and 5 entries each in `key_points` and `key_risks`.

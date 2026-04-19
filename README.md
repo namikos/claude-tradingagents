@@ -1,9 +1,15 @@
-# TradingAgents — Multi-Agent Stock Research for Claude Code
+# TradingAgents — Substanz Edition (v1.0)
 
-A Claude Code plugin that runs a full multi-agent research pipeline on any
-stock ticker — 4 parallel analysts, a live bull/bear debate, a trader, and a
-risk manager — and produces a single buy/hold/sell recommendation with an
-auditable paper trail.
+A Claude Code plugin that runs a **substance-maximizing, multi-perspective stock
+research workflow** on any ticker. 4 base analysts run in parallel, then 13
+famous-investor personas (Buffett, Burry, Wood, Druckenmiller, Taleb, …) weigh
+in, a bull/bear pair debates the case, a trader writes a quant-backed plan, and
+a risk manager signs off using ATR + Kelly hard caps.
+
+Three workflow modes (`/quick`, `/analyze`, `/deep`) × five investor styles
+(value / growth / macro / contrarian / council). Includes a backtester, a
+continuous watch loop, a multi-ticker compare, and a read-only Next.js
+dashboard.
 
 > ⚠️ **Research, not financial advice.** Output is for educational use only.
 
@@ -11,25 +17,22 @@ auditable paper trail.
 
 ## Credit & lineage
 
-This project is a **port** of the excellent
-[**TauricResearch/TradingAgents**](https://github.com/TauricResearch/TradingAgents)
-LangGraph framework to native Claude Code primitives (Agent Teams, MCP, plugin
-packaging). The agent role taxonomy, workflow shape, and output conventions
-come from the upstream project; the orchestration layer, MCP server, and
-plugin packaging are original to this repo.
+This project is a **port + extension** of two upstream projects:
 
-If you find this useful, please ⭐ the **upstream project** as well:
-👉 https://github.com/TauricResearch/TradingAgents
+- [**TauricResearch/TradingAgents**](https://github.com/TauricResearch/TradingAgents)
+  — original LangGraph framework (agent role taxonomy, workflow shape,
+  output conventions). The Claude-Code-native orchestration and MCP server
+  are original to this repo.
+- [**virattt/ai-hedge-fund**](https://github.com/virattt/ai-hedge-fund)
+  — inspired the 13 famous-investor persona pattern and the JSON Signal
+  Footer schema for structured agent outputs.
 
-Both projects are released under the **Apache License 2.0**. See [`LICENSE`](LICENSE)
-and [`NOTICE`](NOTICE) for full attribution and terms.
+Both upstream projects and this plugin are released under **Apache License 2.0**.
+See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE) for full attribution.
 
 ---
 
 ## What it does
-
-Given a ticker like `NVDA`, the plugin spins up 8 specialized teammates that
-collaborate end-to-end:
 
 ```
         ┌── fundamentals-analyst (sonnet) ──┐
@@ -37,16 +40,54 @@ parallel├── technical-analyst    (sonnet) ──┤
         ├── news-analyst         (sonnet) ──┤
         └── sentiment-analyst    (sonnet) ──┘
                        ↓
+        13 persona subagents in parallel (sonnet)
+        Buffett · Graham · Munger · Pabrai · Burry · Taleb · Ackman ·
+        Wood · Lynch · Fisher · Druckenmiller · Damodaran · Jhunjhunwala
+                       ↓
         bull-researcher  ⇄  bear-researcher        (opus, mailbox debate, max 2 rounds)
                        ↓
-        trader  ──── plan ────► risk-manager        (opus, plan-approval loop, max 2x)
+        trader (opus) ─── reads ALL JSON signals ─── writes plan ───►
                        ↓
-                Final BUY/HOLD/SELL
+        risk-manager (opus) — uses atr_stop + kelly_position_size hard caps
+                       ↓
+                Final BUY/HOLD/SELL + position sizing + entry/stop/target
 ```
 
-Every analyst writes a Markdown report into `state/{TICKER}_*.md`; the debate
-transcript, trader plan, and final signed-off decision land there too — so you
-can audit every step.
+Every agent appends a **JSON Signal Footer** to its Markdown report; the
+trader does confidence-weighted aggregation across all signals before writing
+the plan.
+
+---
+
+## Modes
+
+| Command | Analysts | Personas | Bull/Bear | Risk-Loop | Cost | ETA |
+|---|---|---|---|---|---|---|
+| `/quick TICKER` | 2 | 3 | — | — | $1–2 | 2–3 min |
+| `/analyze TICKER` | 4 | 5 | 1 round | 1 iter | $3–5 | 6–8 min |
+| `/deep TICKER` | 4 | **13** + DCF | 2 rounds | 2 iter | $7–15 | 10–15 min |
+
+## Styles (which personas run)
+
+| Style | Personas |
+|---|---|
+| `value` | buffett, graham, munger, pabrai, burry |
+| `growth` | wood, lynch, fisher |
+| `macro` | druckenmiller, damodaran, jhunjhunwala |
+| `contrarian` | burry, taleb, ackman |
+| `council` (default) | all 13 in `deep`, top 5 in `standard`, top 3 in `quick` |
+
+Pass with `--style`: `/analyze NVDA --style value`, `/deep TSLA --style contrarian`.
+
+## Other commands
+
+- `/backtest TICKER --from 2024-01-01 --to 2024-06-30 [--style value]`
+  — historical lite-workflow iteration, returns Sharpe / Sortino / Max-DD /
+  win-rate vs buy-and-hold baseline.
+- `/watch TICKER --interval 1h [--alert-on signal-flip|price-break|news]`
+  — continuous monitor via `ScheduleWakeup`; max 24 iterations by default.
+- `/compare T1,T2,T3 [--mode quick]` — parallel multi-ticker analysis with
+  side-by-side persona heatmap and ranked top picks.
 
 ---
 
@@ -59,13 +100,12 @@ can audit every step.
 /plugin install tradingagents@namikos-tradingagents
 ```
 
-Claude Code will prompt you for your **Alpha Vantage API key** and store it
-securely (the plugin's `userConfig` marks it `sensitive: true`, so it goes
-into your OS keychain).
+Claude Code will prompt for your **Alpha Vantage API key** (stored in your OS
+keychain via the plugin's `userConfig`). Free key in 30 sec at
+[alphavantage.co/support/#api-key](https://www.alphavantage.co/support/#api-key).
 
-> Get a free key in 30 seconds at
-> [alphavantage.co/support/#api-key](https://www.alphavantage.co/support/#api-key).
-> The free tier allows 25 requests/day; responses are cached locally for 1h.
+Optionally also set a **Financial Datasets API key** for premium fundamentals
+(skipped if absent).
 
 ### 2. Enable Agent Teams (one-time)
 
@@ -85,47 +125,72 @@ Add to your `~/.claude/settings.json`:
 pip install -r ${CLAUDE_PLUGIN_ROOT}/tools/requirements.txt
 ```
 
-Or install manually:
+This installs `mcp[cli]`, `httpx`, `yfinance`, `pandas`, `numpy`, `scipy`.
+
+### 4. (Optional) Run the read-only dashboard
 
 ```bash
-pip install 'mcp[cli]>=1.2.0' httpx 'yfinance>=0.2.40' 'requests>=2.31.0'
+cd ${CLAUDE_PLUGIN_ROOT}/app
+npm install
+npm run dev
+# → http://localhost:3000
 ```
+
+The dashboard is purely a viewer — it watches `state/` for changes and renders
+the 13-persona heatmap, debate stream, and trade plan live. You still trigger
+analyses via `/analyze`, `/deep`, etc. in Claude Code.
 
 ---
 
-## Usage
+## Quantitative tools (MCP)
 
-```text
-/analyze NVDA
-```
+The bundled MCP server (`tools/mcp_server.py`) exposes 23 tools, callable by
+agents as `mcp__tradingagents__<name>`:
 
-…or just say:
+### Data sources
+- **Alpha Vantage**: `quote`, `fundamentals`, `balance_sheet`, `cashflow`,
+  `income`, `news`, `global_news`, `technical` (MACD/RSI/SMA/EMA), `insider`
+- **yfinance**: `history`, `info`, `yfin_news`, `options_chain`,
+  `short_interest`
+- **SEC EDGAR**: `sec_filings` (10-K / 10-Q / 8-K / Form-4)
 
-> Run trading-debate on NVDA
+### Quantitative methods
+- `dcf` — discounted-cash-flow intrinsic value with margin-of-safety
+- `kelly_position_size` — half-Kelly-capped position sizing
+- `atr_stop` — Wilder ATR-based stop levels
+- `sharpe_ratio`, `sortino_ratio`, `max_drawdown` — performance metrics
+- `historical_price` — closing price on any past date (drives backtester)
+- `factor_exposure` — beta to SPY + sector correlation
 
-The Lead session spawns the team, waits for the four analyst reports to land,
-brokers the bull/bear debate, asks the trader to commit a plan, runs that plan
-through the risk manager, and finally synthesizes a single recommendation.
+---
 
-### Output you get back
+## Output you get back
 
-- A Markdown summary at the end of the conversation:
-  - Final recommendation (BUY / HOLD / SELL) + conviction, time horizon,
-    position size, entry / stop / target
-  - A one-line view from each analyst
-  - Bull case (1 sentence) and bear case (1 sentence)
-  - Risk-manager verdict with monitor-this caveats
-- Full state files in `state/`:
+After `/analyze` or `/deep`:
+- **Final recommendation** (BUY / HOLD / SELL) + conviction, time horizon,
+  position size, entry / stop / target
+- **One-line view from each analyst** (with confidence)
+- **Persona consensus**: bullish % weighted by confidence, median fair value,
+  tightest thesis-break level
+- **Bull case / Bear case** (1 sentence each)
+- **Risk-manager verdict** with monitor-this caveats and ATR/Kelly checks
 
-  | File | Author |
-  |---|---|
-  | `state/{TICKER}_fundamentals.md` | fundamentals-analyst |
-  | `state/{TICKER}_technical.md` | technical-analyst |
-  | `state/{TICKER}_news.md` | news-analyst |
-  | `state/{TICKER}_sentiment.md` | sentiment-analyst |
-  | `state/{TICKER}_debate.md` | bull-researcher + bear-researcher |
-  | `state/{TICKER}_trader_plan.md` | trader |
-  | `state/{TICKER}_decision.md` | risk-manager |
+Full state files in `state/`:
+
+| File | Author |
+|---|---|
+| `state/{TICKER}_fundamentals.md` | fundamentals-analyst |
+| `state/{TICKER}_technical.md` | technical-analyst |
+| `state/{TICKER}_news.md` | news-analyst |
+| `state/{TICKER}_sentiment.md` | sentiment-analyst |
+| `state/{TICKER}_persona_buffett.md` ×13 | persona subagents |
+| `state/{TICKER}_debate.md` | bull-researcher + bear-researcher |
+| `state/{TICKER}_trader_plan.md` | trader |
+| `state/{TICKER}_decision.md` | risk-manager |
+| `state/{TICKER}_backtest_*.md` | trading-backtest skill |
+
+Every analyst, persona, bull, and bear file ends with a **JSON Signal Footer**
+that the trader parses for weighted aggregation.
 
 ---
 
@@ -134,43 +199,48 @@ through the risk manager, and finally synthesizes a single recommendation.
 ```
 .claude-plugin/
   plugin.json           ← plugin manifest (incl. userConfig for the API key)
-  marketplace.json      ← marketplace entry (single-plugin marketplace)
-agents/                 ← 8 subagent definitions
-skills/trading-debate/  ← orchestrator skill (the workflow)
-commands/analyze.md     ← /analyze TICKER slash command
+  marketplace.json      ← single-plugin marketplace entry
+agents/                 ← 8 base agents (4 analysts + bull/bear + trader + risk-manager)
+agents/personas/        ← 13 famous-investor persona subagents
+skills/
+  trading-debate/       ← main mode-aware orchestrator (quick/standard/deep)
+  trading-backtest/     ← historical lite-workflow iteration
+  trading-watch/        ← ScheduleWakeup-based continuous monitor
+  trading-compare/      ← parallel multi-ticker compare
+commands/               ← /analyze, /quick, /deep, /backtest, /watch, /compare
 tools/
-  mcp_server.py         ← FastMCP server: wraps Alpha Vantage + yfinance
-  alpha_vantage.py      ← also runnable standalone for sanity tests
+  mcp_server.py         ← FastMCP server: 23 tools (data + quant)
+  alpha_vantage.py      ← also runnable standalone
   yfin.py               ← also runnable standalone
   requirements.txt
+app/                    ← read-only Next.js 15 dashboard (optional)
 .mcp.json               ← registers the tradingagents MCP server
 CLAUDE.md               ← shared context loaded by every teammate
 LICENSE / NOTICE        ← Apache-2.0 + upstream attribution
 ```
-
-The MCP server exposes these tools (callable by agents as
-`mcp__tradingagents__<name>`):
-
-- **Alpha Vantage:** `quote`, `fundamentals`, `balance_sheet`, `cashflow`,
-  `income`, `news`, `global_news`, `technical` (MACD/RSI/SMA/EMA), `insider`
-- **yfinance:** `history`, `info`, `yfin_news`
 
 ---
 
 ## Caveats
 
 - **Free-tier Alpha Vantage = 25 requests/day.** The MCP server caches results
-  for 1h on disk in `${CLAUDE_PLUGIN_DATA}/cache/`. A full `/analyze` run on a
-  fresh ticker burns ~10–15 of those, so you can comfortably do 1–2 analyses
-  per day on the free tier (or upgrade your key).
-- **Token cost scales linearly with the team.** A full run uses Opus 4× (the
-  decision-makers) and Sonnet 4× (the analysts). Expect a non-trivial bill
-  per ticker.
-- **Agent Teams is experimental.** If `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
-  is unset, the orchestrator falls back to sequential subagent invocation
-  (skipping the live mailbox debate — bull/bear write sequentially instead).
-- **Plan-approval loop is capped at 2 iterations** to avoid hangs if the risk
-  manager and trader disagree indefinitely.
+  (1h default, 6h for SEC filings) in `${CLAUDE_PLUGIN_DATA}/cache/`. A
+  `/quick` run burns ~5 requests; `/deep` burns ~15–20. Plan accordingly or
+  upgrade your key.
+- **Token cost scales with mode.** `/deep` uses Opus heavily (trader, risk,
+  bull, bear) and Sonnet 17× (4 analysts + 13 personas). Realistic $7–15 per
+  full deep run.
+- **Agent Teams is experimental.** With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`
+  unset, the bull/bear debate falls back to sequential writes (no live
+  mailbox).
+- **Plan-approval loop is capped** at 1 (standard) / 2 (deep) iterations to
+  avoid hangs.
+- **Backtester is a lite simulator** — 2 analysts + 2 personas per iteration,
+  no bull/bear. Realistic, not perfect; treat as a sanity check.
+- **Watch loop is bound to session lifetime.** For 24/7 monitoring use OS
+  cron + `claude -p`.
+- **Dashboard is read-only and unstyled beyond Tailwind defaults.** It works;
+  it's not a product.
 
 ---
 
@@ -178,10 +248,11 @@ The MCP server exposes these tools (callable by agents as
 
 PRs welcome — especially:
 
-- New MCP tools (e.g., options chain, short interest, earnings transcripts).
-- Sharper system prompts for the analysts.
-- Fallback logic for when Alpha Vantage rate-limits.
-- Adapters for additional brokers / data providers.
+- Sharper persona prompts with newer real-life trades.
+- New MCP tools (earnings transcripts, congressional trades, alt-data).
+- Backtester portfolio-level support (currently single-ticker).
+- Dashboard polish (charts, theming, ticker switcher).
+- Fallback logic for Alpha Vantage rate-limits.
 
 Please keep changes Apache-2.0-compatible and update `NOTICE` for any
 substantial code derived from third parties.
@@ -191,6 +262,4 @@ substantial code derived from third parties.
 ## License
 
 Apache License 2.0. See [`LICENSE`](LICENSE) for the full text and
-[`NOTICE`](NOTICE) for attribution to the upstream
-[TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)
-project.
+[`NOTICE`](NOTICE) for attribution.

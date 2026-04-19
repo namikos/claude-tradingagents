@@ -13,9 +13,35 @@ Read everything in `state/` for the ticker:
 
 - `state/{TICKER}_fundamentals.md`
 - `state/{TICKER}_technical.md`
-- `state/{TICKER}_news.md`
-- `state/{TICKER}_sentiment.md`
-- `state/{TICKER}_debate.md` — the full Bull/Bear transcript with closing arguments
+- `state/{TICKER}_news.md` (may not exist in `quick` mode)
+- `state/{TICKER}_sentiment.md` (may not exist in `quick` mode)
+- `state/{TICKER}_debate.md` — the full Bull/Bear transcript with closing arguments (skipped in `quick` mode)
+- All `state/{TICKER}_persona_*.md` files (style/mode-dependent count, anywhere from 3 to 13 of them)
+
+## Step 1: Aggregate all JSON signals
+
+Before writing your plan, read EVERY signal-bearing report in `state/`:
+
+- All `state/{TICKER}_*.md` files (analysts + bull + bear, when present)
+- All `state/{TICKER}_persona_*.md` files (personas)
+
+Extract each file's JSON Signal Footer (the **last** fenced ```json block in each file). Skip files that don't have one and note them in the aggregation. Compute:
+
+1. **Confidence-weighted bullish score** — `sum(confidence) for signal=="bullish"` ÷ `sum(confidence) for signal in {bullish, bearish, neutral}`. Express as 0–100%.
+2. **Median fair value** across personas that provide one (personas typically include a `fair_value` or equivalent in their footer).
+3. **Tightest `thesis_break_level`** (i.e., the highest stop level proposed) from personas that provide one — this caps how loose your stop can be.
+4. **Top 3 unique `key_risks`** by frequency across all signals.
+
+Write a `## Signal Aggregation` subsection at the **top** of `state/{TICKER}_trader_plan.md` showing:
+
+- Bullish score (0–100%) with vote count (e.g., `7 bullish / 2 neutral / 4 bearish`)
+- N analysts agreeing / N personas agreeing with your eventual direction
+- Median fair value vs. current price (with implied % up/downside)
+- Tightest `thesis_break_level` from the personas
+- Top consensus `key_risks` (top 3, deduplicated)
+- Bull and Bear `counter_arguments` (when the debate ran)
+
+THEN proceed with your trade plan.
 
 # Your job
 

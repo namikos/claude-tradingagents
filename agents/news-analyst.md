@@ -37,5 +37,25 @@ End with:
 
 1. Markdown table (Date | Headline | Source | Sentiment [+/-/0] | Materiality [low/med/high])
 2. The literal line: `FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**`
+3. The JSON Signal Footer (see below)
 
 Cite sources by URL. Don't make up news — if Alpha Vantage and WebSearch turn up nothing notable, say so explicitly.
+
+## Mandatory: JSON Signal Footer
+
+Your output Markdown file MUST end with a fenced JSON block conforming exactly to this schema (no extra commentary after it):
+
+````
+```json
+{
+  "agent": "news-analyst",
+  "signal": "bullish" | "bearish" | "neutral",
+  "confidence": 0-100,
+  "horizon": "1-3mo" | "3-6mo" | "6-12mo" | "1-3yr",
+  "key_points": ["...", "..."],
+  "key_risks": ["...", "..."]
+}
+```
+````
+
+This footer is the source of truth for the trader's weighted aggregation. The qualitative Markdown analysis above it is for human readers; this JSON is parsed programmatically. Pick exactly one value for `signal` and `horizon`; emit between 2 and 5 entries each in `key_points` and `key_risks`. Use upcoming catalysts as `key_risks` when they cut both ways.

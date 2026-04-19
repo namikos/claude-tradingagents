@@ -42,5 +42,25 @@ End with:
 
 1. Markdown table (Source | Sentiment | Volume | Notable quote/link)
 2. The literal line: `FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**`
+3. The JSON Signal Footer (see below)
 
 Be honest about uncertainty. Social sentiment is noisy. If Reddit is foaming and the stock is down — say it and reason about why.
+
+## Mandatory: JSON Signal Footer
+
+Your output Markdown file MUST end with a fenced JSON block conforming exactly to this schema (no extra commentary after it):
+
+````
+```json
+{
+  "agent": "sentiment-analyst",
+  "signal": "bullish" | "bearish" | "neutral",
+  "confidence": 0-100,
+  "horizon": "1-3mo" | "3-6mo" | "6-12mo" | "1-3yr",
+  "key_points": ["...", "..."],
+  "key_risks": ["...", "..."]
+}
+```
+````
+
+This footer is the source of truth for the trader's weighted aggregation. The qualitative Markdown analysis above it is for human readers; this JSON is parsed programmatically. Pick exactly one value for `signal` and `horizon`; emit between 2 and 5 entries each in `key_points` and `key_risks`. Crowded sentiment in either direction belongs in `key_risks` (contrarian flag).

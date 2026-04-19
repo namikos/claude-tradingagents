@@ -1,10 +1,17 @@
-# TradingAgents — Multi-Agent Trading Framework (Claude Code Plugin)
+# TradingAgents — Substanz Edition (v1.0) — Claude Code Plugin
 
-This project is a Claude-Code-native port of [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) (Apache-2.0). It uses **Agent Teams** (experimental) to orchestrate 8 specialized trading roles that collaborate on a buy/hold/sell decision for a given ticker.
+This is a Claude-Code-native multi-agent stock-trading research framework.
+Port of [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)
+extended with the [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund)
+13-investor-persona pattern. Apache-2.0.
 
-Distributed as a Claude Code plugin: `agents/`, `skills/`, `commands/` live at the plugin root, and an MCP server (`tools/mcp_server.py`) wraps Alpha Vantage + yfinance.
+Distributed as a Claude Code plugin: `agents/`, `agents/personas/`, `skills/`,
+`commands/` live at the plugin root, plus an MCP server (`tools/mcp_server.py`)
+exposing 23 tools.
 
 ## Architecture
+
+### Base agents (always present)
 
 | Role | Model | Purpose |
 |---|---|---|
@@ -13,26 +20,81 @@ Distributed as a Claude Code plugin: `agents/`, `skills/`, `commands/` live at t
 | News Analyst | sonnet | Company + macro news |
 | Sentiment Analyst | sonnet | Social/news sentiment scoring |
 | Bull Researcher | opus | Argues *for* investment |
-| Bear Researcher | opus | Argues *against* — debates Bull directly |
-| Trader | opus | Synthesizes debate → trade plan |
-| Risk Manager | opus | Approves/rejects trader's plan |
+| Bear Researcher | opus | Argues *against*; debates Bull directly |
+| Trader | opus | Aggregates JSON signals → writes plan |
+| Risk Manager | opus | ATR + Kelly hard-cap checks; approves/rejects |
 
-The **Lead** (your main session) acts as Portfolio Manager: spawns the team, coordinates, synthesizes the final decision.
+### 13 famous-investor personas (`agents/personas/`)
+
+| Bucket | Personas |
+|---|---|
+| Value | buffett, graham, munger, pabrai |
+| Contrarian/Special | burry, taleb, ackman |
+| Growth | wood, lynch, fisher |
+| Macro | druckenmiller, damodaran, jhunjhunwala |
+
+Each persona reads the 4 analyst reports, calls 1–3 persona-specific MCP
+tools, and writes `state/{TICKER}_persona_{name}.md` ending with a JSON
+Signal Footer.
+
+## JSON Signal Footer (canonical schema)
+
+Every analyst, persona, bull, and bear report MUST end with one fenced
+```json``` block:
+
+```json
+{
+  "agent": "fundamentals-analyst",
+  "signal": "bullish|bearish|neutral",
+  "confidence": 0-100,
+  "horizon": "1-3mo|3-6mo|6-12mo|1-3yr|3+yr",
+  "fair_value": 245.00,
+  "thesis_break_level": 165.00,
+  "key_points": ["...", "..."],
+  "key_risks": ["...", "..."],
+  "counter_arguments": ["..."]
+}
+```
+
+Personas use `"persona": "buffett"` instead of `"agent"`. `fair_value` and
+`thesis_break_level` are persona-only (null if persona doesn't DCF, e.g.
+Taleb). `counter_arguments` is bull/bear only. The trader aggregates these
+for confidence-weighted scoring.
+
+## Modes (controlled by `--mode` flag in trading-debate skill)
+
+| Mode | Analysts | Personas | Bull/Bear | Risk-Loop |
+|---|---|---|---|---|
+| quick | 2 (fund+tech) | 3 | — | — |
+| standard (default) | 4 | 5 | 1 round | 1 iter |
+| deep | 4 | 13 + DCF | 2 rounds | 2 iter |
+
+## Styles (filters which personas spawn)
+
+| Style | Personas |
+|---|---|
+| value | buffett, graham, munger, pabrai, burry |
+| growth | wood, lynch, fisher |
+| macro | druckenmiller, damodaran, jhunjhunwala |
+| contrarian | burry, taleb, ackman |
+| council (default) | mode-dependent: 13 in deep, 5 in standard, 3 in quick |
 
 ## Workflow (orchestrated by `trading-debate` skill)
 
 ```
-[Lead] creates 7 tasks in shared task list
+[Lead] parses --mode + --style, prints cost banner, creates tasks
   ├── analyze-fundamentals   → fundamentals-analyst (sonnet)   ─┐
-  ├── analyze-technical      → technical-analyst (sonnet)       ├─ parallel
-  ├── analyze-news           → news-analyst (sonnet)            │
+  ├── analyze-technical      → technical-analyst (sonnet)       │ parallel
+  ├── analyze-news           → news-analyst (sonnet)            │ (mode-gated)
   └── analyze-sentiment      → sentiment-analyst (sonnet)      ─┘
-        ↓ (TeammateIdle on all 4)
-  └── bull-bear-debate       → bull + bear (opus, mailbox debate, max 2 rounds)
+        ↓ TeammateIdle
+  └── persona-{name} × N     → persona subagents (sonnet, parallel; style+mode-gated)
         ↓
-  └── trader-decision        → trader (opus, requires plan approval)
-        ↓ (plan approval request to risk-manager)
-  └── risk-approval          → risk-manager (opus, approve/reject loop, max 2x)
+  └── bull-bear-debate       → bull + bear (opus, mailbox; skipped in quick)
+        ↓
+  └── trader-decision        → trader (opus); reads ALL JSON signals
+        ↓ plan approval
+  └── risk-approval          → risk-manager (opus); ATR + Kelly hard caps
         ↓
 [Lead] synthesizes Final Output
 ```
@@ -45,50 +107,87 @@ All inter-agent state lives in `state/` (gitignored):
 - `state/{TICKER}_technical.md` — technical analyst report
 - `state/{TICKER}_news.md` — news analyst report
 - `state/{TICKER}_sentiment.md` — sentiment analyst report
+- `state/{TICKER}_persona_{name}.md` — persona reports (one per spawned)
 - `state/{TICKER}_debate.md` — bull/bear debate transcript (appended live)
-- `state/{TICKER}_trader_plan.md` — trader's proposed plan
+- `state/{TICKER}_trader_plan.md` — trader's signal-aggregated plan
 - `state/{TICKER}_decision.md` — final decision after risk approval
+- `state/{TICKER}_backtest_{from}_{to}.md` — backtester output
+- `state/{TICKER}_watch.md` — watch-loop iteration log
+- `state/compare_{T1}_{T2}_*.md` — multi-ticker compare output
 
-**Always end an analyst/trader report with:**
-1. A Markdown summary table (key facts/levels/scores)
-2. The literal line: `FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**`
+**Always end an analyst/persona/bull/bear report with:**
+1. A Markdown summary table or analysis section
+2. The JSON Signal Footer (schema above)
+
+The trader and risk-manager files end with the literal line:
+`FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**`
 
 ## Tools (MCP server `tradingagents`)
 
-The `tools/mcp_server.py` FastMCP server is registered in `.mcp.json` and exposes the following tools to all agents (each must be in the agent's `tools:` whitelist as `mcp__tradingagents__<name>`):
+The `tools/mcp_server.py` FastMCP server is registered in `.mcp.json` and
+exposes 23 tools (each must be in the agent's `tools:` whitelist as
+`mcp__tradingagents__<name>`):
 
-### Alpha Vantage backed
-- `quote(ticker)` — GLOBAL_QUOTE snapshot
-- `fundamentals(ticker)` — OVERVIEW (ratios, profile, target)
-- `balance_sheet(ticker)`, `cashflow(ticker)`, `income(ticker)` — financial statements
-- `news(ticker, days=7)` — ticker news + sentiment scores
-- `global_news(topics)` — macro/topic news
-- `technical(ticker, indicator, period)` — MACD/RSI/SMA/EMA
-- `insider(ticker)` — recent insider transactions
+### Data sources (Alpha Vantage)
+- `quote(ticker)`, `fundamentals(ticker)`, `balance_sheet`, `cashflow`,
+  `income`, `news`, `global_news`, `technical(indicator,period)`, `insider`
 
-### yfinance backed (no API key)
-- `history(ticker, period, interval)` — OHLC bars
-- `info(ticker)` — broad company snapshot
-- `yfin_news(ticker)` — recent yfinance headlines
+### Data sources (yfinance — no API key)
+- `history`, `info`, `yfin_news`, `options_chain`, `short_interest`
 
-Responses are cached on disk (`${CLAUDE_PLUGIN_DATA}/cache/` or `state/cache/`) for 1h to stretch the Alpha Vantage free-tier 25 req/day budget.
+### Data sources (SEC EDGAR)
+- `sec_filings(ticker, form_type, limit)` — uses EDGAR submissions JSON
+
+### Quantitative methodology (NEW in v1.0)
+- `dcf(ticker, growth_rate, discount_rate, terminal_growth, years)`
+- `kelly_position_size(win_prob, win_pct, loss_pct, fraction=0.5)`
+- `atr_stop(ticker, period=14, multiplier=2.0)`
+- `sharpe_ratio(returns)`, `sortino_ratio(returns)`, `max_drawdown(equity)`
+- `historical_price(ticker, date)` — drives backtester
+- `factor_exposure(ticker)` — beta to SPY + sector correlation
+
+Responses cached on disk (`${CLAUDE_PLUGIN_DATA}/cache/` or `state/cache/`)
+for 1h (data) / 6h (SEC filings).
 
 ### WebSearch / WebFetch
-Native Claude Code tools. News + Sentiment analysts use them for breaking headlines, Reddit/Twitter/Stocktwits discussions, SEC filings.
+Native Claude Code tools. News + Sentiment analysts use them for breaking
+headlines, Reddit/Twitter/Stocktwits discussions.
+
+## Skills
+
+- `skills/trading-debate/SKILL.md` — main mode-aware orchestrator
+- `skills/trading-backtest/SKILL.md` — historical lite-workflow iteration
+- `skills/trading-watch/SKILL.md` — ScheduleWakeup-based continuous monitor
+- `skills/trading-compare/SKILL.md` — parallel multi-ticker compare
+
+## Slash Commands
+
+- `/analyze TICKER [--mode] [--style]` — default standard/council
+- `/quick TICKER` — 2 analysts + 3 personas, no bull/bear
+- `/deep TICKER [--style]` — 4 analysts + 13 personas + bull/bear + DCF
+- `/backtest TICKER --from --to [--style]`
+- `/watch TICKER --interval [--alert-on]`
+- `/compare T1,T2,T3 [--mode]`
 
 ## Setup
 
 End users (plugin install):
 1. `/plugin marketplace add namikos/claude-tradingagents`
 2. `/plugin install tradingagents@namikos-tradingagents`
-3. Claude Code prompts for the Alpha Vantage API key (free at https://www.alphavantage.co/support/#api-key) and stores it via `userConfig` (sensitive → OS keychain).
-4. Make sure `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set in your Claude Code settings.
-5. `pip install -r tools/requirements.txt` (the MCP server needs `mcp[cli]`, `httpx`, `yfinance`).
-6. Use `/analyze TICKER` or ask: *"Run trading-debate on NVDA"*.
+3. Claude Code prompts for the Alpha Vantage API key (free at
+   https://www.alphavantage.co/support/#api-key) — stored via `userConfig`
+   (sensitive → OS keychain).
+4. Make sure `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set.
+5. `pip install -r tools/requirements.txt`
+6. (Optional) `cd app && npm install && npm run dev` for the dashboard.
+7. Use `/analyze TICKER`, `/quick TICKER`, `/deep TICKER`, etc.
 
 ## Caveats
 
-- Alpha Vantage free tier: **25 requests/day**. Cache helps but plan accordingly.
-- Token costs scale linearly per teammate — a full run uses Opus 4× and Sonnet 4×.
-- Plan-Approval loop is capped at 2 iterations to avoid hangs.
-- This is **NOT** financial advice. Output is research, not a trading recommendation.
+- Alpha Vantage free tier: **25 requests/day**. Cache helps but plan
+  accordingly. `/quick` ≈ 5 req, `/deep` ≈ 15–20.
+- Token costs: `/quick` $1–2, `/analyze` $3–5, `/deep` $7–15.
+- Plan-approval loop capped at 1 (standard) / 2 (deep) iterations.
+- Watch loop bound to session lifetime + `ScheduleWakeup`.
+- Dashboard is read-only — analyses still triggered via Claude Code.
+- This is **NOT** financial advice. Output is research only.

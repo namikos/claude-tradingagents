@@ -1,7 +1,7 @@
 {
   "name": "tradingagents",
-  "version": "0.1.0",
-  "description": "Multi-agent stock-trading research workflow for Claude Code — 4 analysts + bull/bear debate + trader + risk manager. Port of TauricResearch/TradingAgents to native Claude Code Agent Teams.",
+  "version": "1.0.0",
+  "description": "Substanz Edition — 4 analysts + 13 famous-investor personas (Buffett/Burry/Wood/...) + bull/bear debate + trader + risk manager + DCF/Kelly/ATR/Sharpe quant tools + backtester + read-only Next.js dashboard. Multi-mode (quick/standard/deep), multi-style (value/growth/macro/contrarian/council).",
   "author": {
     "name": "namikos",
     "url": "https://github.com/namikos"
@@ -27,6 +27,14 @@
       "sensitive": true,
       "required": true,
       "envVar": "ALPHA_VANTAGE_KEY"
+    },
+    "fds_api_token": {
+      "type": "string",
+      "title": "Financial Datasets API key (optional)",
+      "description": "Optional — premium fundamentals data via https://financialdatasets.ai. Leave empty to use only the free Alpha Vantage + yfinance sources.",
+      "sensitive": true,
+      "required": false,
+      "envVar": "FINANCIAL_DATASETS_API_KEY"
     }
   }
 }
