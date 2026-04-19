@@ -3,8 +3,8 @@
 # ~3GB footprint (torch dominant). Skip if you don't use:
 #   - finbert_score (transformers, torch)
 #   - vectorbt_backtest (vectorbt)
-#   - risk_metrics (empyrical)
-#   - frac_diff, triple_barrier_labels (mlfinlab)
+#   - risk_metrics (empyrical-reloaded)
+#   - frac_diff, triple_barrier_labels (mlfinlab — see note below)
 
 transformers>=4.35.0
 torch>=2.0.0
@@ -12,4 +12,10 @@ vectorbt>=0.26.0
 # upstream `empyrical` is unmaintained and breaks on Python 3.12+
 # (uses removed configparser.SafeConfigParser). Use community fork.
 empyrical-reloaded>=0.5.10
-mlfinlab>=2.0.0
+
+# `mlfinlab` >=2.0 was commercialised by Hudson & Thames and is no longer on
+# PyPI. The MCP `frac_diff` tool ships with a compact local fallback, and
+# `triple_barrier_labels` returns a graceful error if mlfinlab is missing.
+# To enable the full mlfinlab API, install the legacy 1.x line manually:
+#   pip install "mlfinlab<2.0"
+# or pull from the Hudson & Thames private index per their licence terms.
