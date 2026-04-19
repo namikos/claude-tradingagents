@@ -1,4 +1,4 @@
-# TradingAgents — Substanz Edition (v1.0)
+# TradingAgents — Substanz Edition (v2.0)
 
 A Claude Code plugin that runs a **substance-maximizing, multi-perspective stock
 research workflow** on any ticker. 4 base analysts run in parallel, then 13

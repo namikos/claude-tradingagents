@@ -1,7 +1,7 @@
 {
   "name": "tradingagents",
-  "version": "1.0.0",
-  "description": "Substanz Edition — 4 analysts + 13 famous-investor personas (Buffett/Burry/Wood/...) + bull/bear debate + trader + risk manager + DCF/Kelly/ATR/Sharpe quant tools + backtester + read-only Next.js dashboard. Multi-mode (quick/standard/deep), multi-style (value/growth/macro/contrarian/council).",
+  "version": "2.0.0",
+  "description": "Substanz Edition v2 — 4 analysts + 13 famous-investor personas (Buffett/Burry/Wood/…) + bull/bear debate + trader + risk manager + DCF/Kelly/ATR/Sharpe quant tools + backtester + read-only Next.js dashboard. Multi-mode (quick/standard/deep), multi-style (value/growth/macro/contrarian/council). v2 ships TOON-encoded MCP tabular outputs (history/technical) and a single-call signal-aggregator for the trader, cutting per-run tokens ~10% on /deep.",
   "author": {
     "name": "namikos",
     "url": "https://github.com/namikos"

@@ -1,4 +1,4 @@
-# TradingAgents — Substanz Edition (v1.0) — Claude Code Plugin
+# TradingAgents — Substanz Edition (v2.0) — Claude Code Plugin
 
 This is a Claude-Code-native multi-agent stock-trading research framework.
 Port of [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)
