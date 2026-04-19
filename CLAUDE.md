@@ -7,7 +7,7 @@ extended with the [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fu
 
 Distributed as a Claude Code plugin: `agents/`, `agents/personas/`, `skills/`,
 `commands/` live at the plugin root, plus an MCP server (`tools/mcp_server.py`)
-exposing 37 tools.
+exposing 41 tools.
 
 ## Architecture
 
@@ -125,7 +125,7 @@ The trader and risk-manager files end with the literal line:
 ## Tools (MCP server `tradingagents`)
 
 The `tools/mcp_server.py` FastMCP server is registered in `.mcp.json` and
-exposes 37 tools (each must be in the agent's `tools:` whitelist as
+exposes 41 tools (each must be in the agent's `tools:` whitelist as
 `mcp__tradingagents__<name>`):
 
 ### Data sources (Alpha Vantage)
@@ -149,7 +149,7 @@ exposes 37 tools (each must be in the agent's `tools:` whitelist as
 Responses cached on disk (`${CLAUDE_PLUGIN_DATA}/cache/` or `state/cache/`)
 for 1h (data) / 6h (SEC filings).
 
-### v2.1 — Datentiefe (NEW, +14 tools → 37 total)
+### v2.1 — Depth & Quant Layers (NEW, +17 tools → 41 total)
 
 **Macro:**
 - `fred(series_id, lookback_days)` — St. Louis Fed time series
@@ -170,7 +170,7 @@ for 1h (data) / 6h (SEC filings).
 
 **Sentiment:**
 - `reddit_mentions(ticker, subreddits, days)` — PRAW subreddit search
-- `finbert_score(text)` — finance-domain BERT classifier (lokal, ~440MB)
+- `finbert_score(text)` — finance-domain BERT classifier (local, ~440MB)
 
 **Quant (heavy deps; see `tools/requirements-quant.txt`):**
 - `vectorbt_backtest(ticker, signals, start, end)` — vectorized backtest

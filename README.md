@@ -107,6 +107,16 @@ keychain via the plugin's `userConfig`). Free key in 30 sec at
 Optionally also set a **Financial Datasets API key** for premium fundamentals
 (skipped if absent).
 
+**Optional v2.1 API keys** — all free-tier, all opt-in (tools return a clean
+error if a key is missing instead of crashing):
+
+| Key | Source | Powers |
+|---|---|---|
+| `fred_api_token` | [FRED API](https://fred.stlouisfed.org/docs/api/api_key.html) (free) | `fred()` macro time series |
+| `fmp_api_token` | [Financial Modeling Prep](https://site.financialmodelingprep.com/developer) (250/day) | `earnings_transcript()` |
+| `finnhub_api_token` | [Finnhub](https://finnhub.io) (60/min) | analyst recs + earnings/IPO calendar |
+| `reddit_client_id` + `reddit_client_secret` + `reddit_user_agent` | [Reddit OAuth app](https://www.reddit.com/prefs/apps) | `reddit_mentions()` PRAW search |
+
 ### 2. Enable Agent Teams (one-time)
 
 Add to your `~/.claude/settings.json`:
@@ -150,8 +160,8 @@ analyses via `/analyze`, `/deep`, etc. in Claude Code.
 
 ## Quantitative tools (MCP)
 
-The bundled MCP server (`tools/mcp_server.py`) exposes 37 tools, callable by
-agents as `mcp__tradingagents__<name>`:
+The bundled MCP server (`tools/mcp_server.py`) exposes **41 tools**, callable
+by agents as `mcp__tradingagents__<name>`:
 
 ### Data sources
 - **Alpha Vantage**: `quote`, `fundamentals`, `balance_sheet`, `cashflow`,
@@ -168,30 +178,57 @@ agents as `mcp__tradingagents__<name>`:
 - `historical_price` — closing price on any past date (drives backtester)
 - `factor_exposure` — beta to SPY + sector correlation
 
-### v2.1 — Datentiefe (37 Tools total)
+### v2.1 — Depth & Quant Layers (17 new tools)
 
-**Macro layer** (NEW v2.1):
-- `fred(series_id, lookback_days)` — St. Louis Fed time series
-- `vix_term_structure()`, `cboe_skew()` — fear gauge & tail-risk indicators
+v2.1 adds five new analysis layers on top of the v2.0 core. Each layer is
+opt-in: tools that need an API key or heavy dep return a structured
+`{"error": "..."}` instead of crashing if it's missing.
 
-**Smart-Money layer** (NEW v2.1):
-- `congress_trades(ticker)` — Senator/House-Member trades (45-day disclosure)
-- `options_flow(ticker)` — unusual options activity (Barchart)
-- `etf_holdings(ticker)` — which ETFs hold this ticker
-- `institutional_holdings(ticker)` — 13F-HR filings (45-day lag)
+**Macro layer** — what the broader market is doing
+- `fred(series_id, lookback_days)` — St. Louis Fed time series (DGS10, VIXCLS,
+  UNRATE, CPI, M2, ...). Grounds news headlines in actual macro data.
+- `vix_term_structure()` — VIX/VIX9D/VIX3M/VVIX with auto-classification
+  (calm/normal/stress + contango/backwardation). Feeds the regime-aware
+  position-sizing rule in the risk-manager.
+- `cboe_skew()` — SKEW Index (>150 = elevated tail risk).
 
-**Forward-Looking layer** (NEW v2.1):
-- `earnings_transcript(ticker, quarter, year)` — full earnings call transcript (FMP)
-- `finnhub_recommendations(ticker)`, `finnhub_calendar()`, `finnhub_ipo_calendar()`
+**Smart-Money layer** — what insiders & institutions are actually doing
+- `congress_trades(ticker)` — Senator + House-Member trades (45-day STOCK-Act
+  disclosure window). Often a leading news catalyst.
+- `options_flow(ticker)` — unusual options activity scraped from Barchart.
+  Smart money frequently positions via options before equity moves.
+- `etf_holdings(ticker)` — which ETFs hold this ticker, weighted by allocation.
+  Surfaces ETF-flow risk (e.g. ARKK contagion → individual TSLA pressure).
+- `institutional_holdings(ticker)` — latest 13F-HR filings from
+  Berkshire / Scion / Pershing / ARK / Bridgewater / Renaissance. Lets you
+  cross-check whether a persona's bull thesis matches what its real-life
+  counterpart actually owns. **Trailing indicator (45-day lag.)**
 
-**Sentiment layer** (NEW v2.1):
+**Forward-Looking layer** — what's about to happen
+- `earnings_transcript(ticker, quarter, year)` — full earnings-call text
+  via Financial Modeling Prep. Forward guidance + management tone.
+- `finnhub_recommendations(ticker)` — analyst consensus trends over time
+  (strong-buy / buy / hold / sell / strong-sell counts per period).
+- `finnhub_calendar(from, to)` — earnings schedule (default: next 14d). The
+  trader checks this before finalizing entry dates.
+- `finnhub_ipo_calendar(from, to)` — upcoming IPOs (default: next 30d).
+
+**Sentiment layer** — quantified retail/social signal
 - `reddit_mentions(ticker, subreddits, days)` — PRAW-based subreddit search
-- `finbert_score(text)` — finance-specific BERT sentiment classifier (lokal, ~440MB)
+  across r/wallstreetbets, r/investing, r/stocks. Replaces brittle WebSearch.
+- `finbert_score(text)` — finance-specific BERT classifier
+  (`ProsusAI/finbert`). Returns `{positive, negative, neutral}` confidences.
+  Lazy-loaded on first call (~440MB cold-start, cached after).
 
-**Quant layer** (NEW v2.1):
-- `vectorbt_backtest(ticker, signals, start, end)` — vectorized portfolio backtest
-- `risk_metrics(returns)` — Calmar, Omega, Tail-Ratio, Stability, CVaR (empyrical)
-- `frac_diff(series, d)`, `triple_barrier_labels(...)` — López de Prado methods (mlfinlab)
+**Quant layer** — institutional-grade backtest & risk
+- `vectorbt_backtest(ticker, signals, start, end)` — vectorized portfolio
+  backtest (ms-fast). Plug into `/backtest --engine vectorbt` for the new
+  fast path; the legacy lite-loop remains the default for backwards-compat.
+- `risk_metrics(returns)` — Calmar, Omega, Tail-Ratio, Stability, CVaR via
+  `empyrical`. More robust than hand-rolled Sharpe for fat-tailed returns.
+- `frac_diff(series, d)` — López de Prado fractional differentiation
+  (preserves memory while achieving stationarity).
+- `triple_barrier_labels(prices, ...)` — TBL labeling for ML pipelines.
 
 ---
 
@@ -240,7 +277,7 @@ skills/
   trading-compare/      ← parallel multi-ticker compare
 commands/               ← /analyze, /quick, /deep, /backtest, /watch, /compare
 tools/
-  mcp_server.py         ← FastMCP server: 23 tools (data + quant)
+  mcp_server.py         ← FastMCP server: 41 tools (data + quant + v2.1 layers)
   alpha_vantage.py      ← also runnable standalone
   yfin.py               ← also runnable standalone
   requirements.txt
@@ -273,6 +310,17 @@ LICENSE / NOTICE        ← Apache-2.0 + upstream attribution
 - **Dashboard is read-only and unstyled beyond Tailwind defaults.** It works;
   it's not a product.
 
+### v2.1 specifics
+- **FinBERT cold-start downloads ~440MB** (`ProsusAI/finbert`) on the very
+  first `finbert_score()` call. Cached afterwards. Skip the install if you
+  don't want it — `requirements-quant.txt` is opt-in.
+- **`options_flow` HTML-scrapes Barchart.** If Barchart changes its DOM the
+  tool returns `{"error": "barchart parse failed"}` — never a crash.
+- **`institutional_holdings` is a trailing indicator.** 13F-HR filings have a
+  45-day reporting lag, so the data is always one quarter behind.
+- **`mlfinlab` API is unstable**, so `frac_diff` and `triple_barrier_labels`
+  ship a local fallback implementation that doesn't depend on it.
+
 ---
 
 ## Contributing
@@ -280,10 +328,11 @@ LICENSE / NOTICE        ← Apache-2.0 + upstream attribution
 PRs welcome — especially:
 
 - Sharper persona prompts with newer real-life trades.
-- New MCP tools (earnings transcripts, congressional trades, alt-data).
+- New MCP tools (earnings whisper numbers, dark-pool flow, alt-data).
 - Backtester portfolio-level support (currently single-ticker).
-- Dashboard polish (charts, theming, ticker switcher).
+- Dashboard polish (charts, theming, ticker switcher) + v2.1 layer views.
 - Fallback logic for Alpha Vantage rate-limits.
+- Robust `options_flow` parser (Barchart DOM is fragile).
 
 Please keep changes Apache-2.0-compatible and update `NOTICE` for any
 substantial code derived from third parties.
