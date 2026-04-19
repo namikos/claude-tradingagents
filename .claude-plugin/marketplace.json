@@ -2,27 +2,30 @@
   "name": "namikos-tradingagents",
   "owner": {
     "name": "namikos",
-    "url": "https://github.com/namikos"
+    "email": "os.namik@gmail.com"
   },
   "metadata": {
-    "description": "Multi-agent trading research workflow for Claude Code — port of TauricResearch/TradingAgents to native Agent Teams.",
+    "description": "Multi-agent trading research workflow for Claude Code — port of TauricResearch/TradingAgents extended with virattt/ai-hedge-fund persona pattern.",
     "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "tradingagents",
-      "source": ".",
+      "source": {
+        "source": "github",
+        "repo": "namikos/claude-tradingagents"
+      },
       "description": "Substanz Edition — 4 analysts + 13 famous-investor personas + bull/bear debate + trader + risk manager + DCF/Kelly/ATR/Sharpe quant tools + backtester + read-only Next.js dashboard. Quick/standard/deep modes × value/growth/macro/contrarian/council styles.",
       "version": "1.0.0",
       "author": {
         "name": "namikos",
-        "url": "https://github.com/namikos"
+        "email": "os.namik@gmail.com"
       },
       "homepage": "https://github.com/namikos/claude-tradingagents",
+      "repository": "https://github.com/namikos/claude-tradingagents",
       "license": "Apache-2.0",
       "category": "finance",
-      "keywords": ["trading", "stocks", "research", "agent-teams", "alpha-vantage", "personas", "buffett", "burry", "wood", "dcf", "backtest", "dashboard"],
-      "strict": false
+      "keywords": ["trading", "stocks", "research", "agent-teams", "alpha-vantage", "personas", "buffett", "burry", "wood", "dcf", "backtest", "dashboard"]
     }
   ]
 }
