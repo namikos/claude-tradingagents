@@ -26,6 +26,27 @@ import yfinance as yf
 from mcp.server.fastmcp import FastMCP
 
 try:
+    from toon import encode as _toon_encode
+except ImportError:  # pragma: no cover
+    _toon_encode = None  # falls back to JSON in tools that opt in to TOON
+
+
+def _maybe_toon(value) -> str:
+    """Encode `value` as TOON when the python-toon package is installed.
+
+    Falls back to compact JSON when TOON isn't available so agents always
+    receive a parseable string. TOON's tabular form gives ~40-60% token
+    reduction on uniform arrays-of-objects (history bars, indicator series,
+    aggregated signal footers).
+    """
+    if _toon_encode is not None:
+        try:
+            return _toon_encode(value)
+        except Exception as exc:  # pragma: no cover
+            log.warning("TOON encode failed, falling back to JSON: %s", exc)
+    return json.dumps(value, default=str)
+
+try:
     import numpy as np
     _HAS_NUMPY = True
 except ImportError:  # pragma: no cover - defensive
@@ -57,6 +78,20 @@ DATA_ROOT = Path(os.environ.get("CLAUDE_PLUGIN_DATA")
                  or os.environ.get("TRADINGAGENTS_DATA")
                  or Path(__file__).resolve().parent.parent / "state")
 CACHE_DIR = DATA_ROOT / "cache"
+
+
+def _state_dir() -> Path:
+    """Locate the state/ directory the agents write reports to.
+
+    Agents use the Read tool which is CWD-relative (Claude Code's CWD = the
+    user's project root). The MCP server inherits that CWD, so plain
+    `Path("state")` works in the common case. Fall back to other plausible
+    locations if it doesn't exist yet.
+    """
+    for candidate in (Path("state"), Path.cwd() / "state", DATA_ROOT):
+        if candidate.exists() and candidate.is_dir():
+            return candidate
+    return Path("state")
 
 
 def _api_key() -> str:
@@ -145,8 +180,14 @@ def global_news(topics: Optional[str] = None, limit: int = 20) -> dict:
 
 @mcp.tool()
 def technical(ticker: str, indicator: str = "MACD", interval: str = "daily",
-              series_type: str = "close", period: int = 14) -> dict:
-    """Technical indicator (MACD/RSI/SMA/EMA) series for a ticker."""
+              series_type: str = "close", period: int = 14) -> str:
+    """Technical indicator (MACD/RSI/SMA/EMA) series for a ticker.
+
+    Returns TOON-encoded tabular string with the date-keyed series flattened
+    to `series[N]{date,...indicator-fields}` — ~50% fewer tokens than the
+    nested Alpha Vantage JSON. Last 120 datapoints only (sufficient for any
+    standard window; full history available via Alpha Vantage directly).
+    """
     fn = indicator.upper()
     if fn not in {"MACD", "RSI", "SMA", "EMA"}:
         raise ValueError(f"unsupported indicator {indicator}")
@@ -156,7 +197,30 @@ def technical(ticker: str, indicator: str = "MACD", interval: str = "daily",
         params.update({"fastperiod": "12", "slowperiod": "26", "signalperiod": "9"})
     else:
         params["time_period"] = str(period)
-    return _alpha_request(params)
+    raw = _alpha_request(params)
+
+    # Find the "Technical Analysis: <FN>" key — Alpha Vantage names it that way.
+    series_key = next((k for k in raw if k.startswith("Technical Analysis")), None)
+    if series_key is None:
+        return _maybe_toon({"ticker": ticker.upper(), "indicator": fn, "raw": raw})
+    series = raw.get(series_key, {})
+    rows = []
+    for date_str in sorted(series.keys(), reverse=True)[:120]:
+        row = {"date": date_str}
+        for k, v in series[date_str].items():
+            try:
+                row[k.lower()] = float(v)
+            except (TypeError, ValueError):
+                row[k.lower()] = v
+        rows.append(row)
+    rows.reverse()  # chronological order
+    return _maybe_toon({
+        "ticker": ticker.upper(),
+        "indicator": fn,
+        "interval": interval,
+        "period": period,
+        "series": rows,
+    })
 
 
 @mcp.tool()
@@ -166,8 +230,13 @@ def insider(ticker: str) -> dict:
 
 
 @mcp.tool()
-def history(ticker: str, period: str = "6mo", interval: str = "1d") -> list[dict]:
-    """Historical OHLC bars from yfinance. period: 1d..max. interval: 1m..3mo."""
+def history(ticker: str, period: str = "6mo", interval: str = "1d") -> str:
+    """Historical OHLC bars from yfinance. period: 1d..max. interval: 1m..3mo.
+
+    Returns TOON-encoded tabular string (~40-60% fewer tokens than JSON)
+    with shape `bars[N]{date,open,high,low,close,volume}`. Agents parse TOON
+    natively from the header row — no separate format instruction needed.
+    """
     log.info("yfinance history %s %s/%s", ticker, period, interval)
     df = yf.Ticker(ticker).history(period=period, interval=interval)
     df = df.reset_index()
@@ -175,7 +244,8 @@ def history(ticker: str, period: str = "6mo", interval: str = "1d") -> list[dict
         df["Date"] = df["Date"].astype(str)
     elif "Datetime" in df.columns:
         df["Datetime"] = df["Datetime"].astype(str)
-    return json.loads(df.to_json(orient="records", date_format="iso"))
+    records = json.loads(df.to_json(orient="records", date_format="iso"))
+    return _maybe_toon({"ticker": ticker.upper(), "bars": records})
 
 
 @mcp.tool()
@@ -898,6 +968,97 @@ def sec_filings(ticker: str, form_type: str = "10-K", limit: int = 5) -> dict:
     }
     _set_cache("sec_filings", payload, result)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Trader-side helper: aggregate every JSON Signal Footer in state/ as TOON
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+
+_SIGNAL_FENCE = _re.compile(r"```json\s*(\{[\s\S]*?\})\s*```", _re.MULTILINE)
+
+
+def _extract_last_signal(md_text: str) -> Optional[dict]:
+    """Return the last fenced ```json {...} block in `md_text`, parsed."""
+    matches = _SIGNAL_FENCE.findall(md_text)
+    if not matches:
+        return None
+    for raw in reversed(matches):
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
+@mcp.tool()
+def aggregate_signals(ticker: str) -> str:
+    """Aggregate every JSON Signal Footer found in `state/{ticker}_*.md`.
+
+    Scans the state directory for analyst, persona, bull, and bear reports
+    for the given ticker, extracts the last fenced ```json``` block from
+    each, and returns a TOON-encoded table — one row per agent/persona —
+    with columns: source, role, signal, confidence, horizon, fair_value,
+    thesis_break_level. The trader reads this single TOON payload instead
+    of opening 19 individual files, cutting tokens ~40% on the aggregation
+    step. Files without a parseable footer are listed under `missing`.
+    """
+    state = _state_dir()
+    log.info("aggregate_signals %s in %s", ticker, state)
+    prefix_lower = f"{ticker.lower()}_"
+    rows: list[dict] = []
+    missing: list[str] = []
+
+    seen: set[Path] = set()
+    candidates = list(state.glob(f"{ticker}_*.md")) + list(state.glob(f"{ticker.lower()}_*.md"))
+    for md in sorted({p.resolve() for p in candidates}):
+        if not md.name.lower().startswith(prefix_lower):
+            continue
+        if md in seen:
+            continue
+        seen.add(md)
+        # Skip trader's own plan + risk decision (no signal footer there) + debate transcript
+        stem_lower = md.stem.lower()
+        if any(stem_lower.endswith(skip) for skip in ("_trader_plan", "_decision", "_debate", "_watch")):
+            continue
+        try:
+            text = md.read_text(encoding="utf-8")
+        except Exception as exc:
+            missing.append(f"{md.name} (read error: {exc})")
+            continue
+        sig = _extract_last_signal(text)
+        if sig is None:
+            missing.append(md.name)
+            continue
+        # Derive source + role from filename: TICKER_<role>.md or TICKER_persona_<name>.md
+        suffix = md.stem[len(ticker) + 1:]  # strip "TICKER_"
+        if suffix.startswith("persona_"):
+            role = "persona"
+            source = suffix[len("persona_"):]
+        else:
+            role = suffix.split("_")[0]  # "fundamentals", "technical", "bull", etc.
+            source = suffix
+        rows.append({
+            "source": source,
+            "role": role,
+            "signal": sig.get("signal"),
+            "confidence": sig.get("confidence"),
+            "horizon": sig.get("horizon"),
+            "fair_value": sig.get("fair_value"),
+            "thesis_break_level": sig.get("thesis_break_level"),
+            "key_points": "; ".join(sig.get("key_points") or [])[:200],
+            "key_risks": "; ".join(sig.get("key_risks") or [])[:200],
+        })
+
+    payload = {
+        "ticker": ticker.upper(),
+        "n_signals": len(rows),
+        "signals": rows,
+        "missing": missing,
+    }
+    return _maybe_toon(payload)
 
 
 if __name__ == "__main__":

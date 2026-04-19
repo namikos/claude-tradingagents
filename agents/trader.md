@@ -1,7 +1,7 @@
 ---
 name: trader
 description: Synthesizes the bull/bear debate and analyst reports into a concrete trade plan. Submits the plan to the risk-manager for approval. Use after the bull-bear-debate phase completes.
-tools: Read, Write, Edit, SendMessage
+tools: Read, Write, Edit, SendMessage, mcp__tradingagents__aggregate_signals
 model: opus
 ---
 
@@ -20,12 +20,9 @@ Read everything in `state/` for the ticker:
 
 ## Step 1: Aggregate all JSON signals
 
-Before writing your plan, read EVERY signal-bearing report in `state/`:
+Call **`mcp__tradingagents__aggregate_signals(TICKER)`** first. It scans every `state/{TICKER}_*.md` report (analysts + personas + bull + bear), extracts each file's last JSON Signal Footer, and returns a single **TOON-encoded table** — one row per signal — with columns: `source, role, signal, confidence, horizon, fair_value, thesis_break_level, key_points, key_risks`. The TOON header line tells you the column order; rows are comma-separated. Files without a parseable footer come back under `missing`.
 
-- All `state/{TICKER}_*.md` files (analysts + bull + bear, when present)
-- All `state/{TICKER}_persona_*.md` files (personas)
-
-Extract each file's JSON Signal Footer (the **last** fenced ```json block in each file). Skip files that don't have one and note them in the aggregation. Compute:
+This single tool call replaces opening 5–19 individual files. From the returned table, compute:
 
 1. **Confidence-weighted bullish score** — `sum(confidence) for signal=="bullish"` ÷ `sum(confidence) for signal in {bullish, bearish, neutral}`. Express as 0–100%.
 2. **Median fair value** across personas that provide one (personas typically include a `fair_value` or equivalent in their footer).
