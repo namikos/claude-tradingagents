@@ -12,8 +12,7 @@
       "name": "tradingagents",
       "source": {
         "source": "url",
-        "url": "https://github.com/namikos/claude-tradingagents.git",
-        "ref": "v1.0-substanz-edition"
+        "url": "https://github.com/namikos/claude-tradingagents.git"
       },
       "description": "Substanz Edition — 4 analysts + 13 famous-investor personas + bull/bear debate + trader + risk manager + DCF/Kelly/ATR/Sharpe quant tools + backtester + read-only Next.js dashboard. Quick/standard/deep modes × value/growth/macro/contrarian/council styles.",
       "version": "1.0.0",
