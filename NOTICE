@@ -20,8 +20,35 @@ from the upstream project:
   - The system-prompt structure of each agent role (rewritten and adapted
     for Claude Code Agent Teams + MCP tools).
 
+In addition, the v1.0 "Substanz Edition" extension also draws inspiration
+from a second upstream project:
+
+    AI Hedge Fund: Multi-Agent Investment Research with Famous-Investor Personas
+    https://github.com/virattt/ai-hedge-fund
+    Copyright virattt and contributors
+    Licensed under the MIT License
+
+Specifically, the following parts of this plugin are inspired by or adapted
+from virattt/ai-hedge-fund:
+
+  - The famous-investor persona pattern (Buffett, Graham, Munger, Burry,
+    Wood, Ackman, Lynch, Fisher, Druckenmiller, Damodaran, Pabrai, Taleb,
+    Jhunjhunwala) as parallel signal-producing agents.
+  - The structured signal output schema (signal direction + confidence)
+    as a programmatically-aggregable agent contract — adapted into the
+    JSON Signal Footer convention used throughout this plugin.
+  - The portfolio-manager-as-signal-aggregator pattern (here implemented
+    as the trader's confidence-weighted aggregation step).
+
+Each persona prompt was rewritten from scratch for Claude Code; no source
+code from virattt/ai-hedge-fund is incorporated. The MIT terms of the
+upstream are compatible with this plugin's Apache-2.0 license.
+
 The native Claude Code orchestration (Agent Teams, mailbox messaging, plan
-approval, MCP server, plugin packaging) is original to this project.
+approval, MCP server, plugin packaging, the read-only Next.js dashboard,
+and the quantitative MCP toolkit including DCF, Kelly, ATR, Sharpe, Sortino,
+Max-Drawdown, factor exposure, options chain, short interest, and SEC EDGAR
+integration) is original to this project.
 
 This plugin is licensed under the Apache License, Version 2.0. See the
 LICENSE file for the full license text.
