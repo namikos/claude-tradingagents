@@ -1,0 +1,33 @@
+TradingAgents (Claude Code Plugin)
+Copyright 2026 namikos
+
+This product is a derivative work of and includes design ideas, agent role
+definitions, and workflow patterns adapted from:
+
+    TradingAgents: Multi-Agents LLM Financial Trading Framework
+    https://github.com/TauricResearch/TradingAgents
+    Copyright TauricResearch and contributors
+    Licensed under the Apache License, Version 2.0
+
+Specifically, the following parts of this plugin are inspired by or adapted
+from the upstream project:
+
+  - The agent role taxonomy (Fundamentals/Technical/News/Sentiment analyst,
+    Bull/Bear researcher, Trader, Risk Manager).
+  - The sequential workflow stages: parallel analyst research, bull/bear
+    debate, trader synthesis, risk-manager approval.
+  - The output convention `FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**`.
+  - The system-prompt structure of each agent role (rewritten and adapted
+    for Claude Code Agent Teams + MCP tools).
+
+The native Claude Code orchestration (Agent Teams, mailbox messaging, plan
+approval, MCP server, plugin packaging) is original to this project.
+
+This plugin is licensed under the Apache License, Version 2.0. See the
+LICENSE file for the full license text.
+
+DISCLAIMER
+This software is intended for research and educational purposes only. Output
+produced by the agents is NOT financial advice. The authors of both the
+upstream project and this plugin disclaim any liability for trading or
+investment decisions made on the basis of this software.

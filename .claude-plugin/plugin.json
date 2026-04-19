@@ -1,0 +1,32 @@
+{
+  "name": "tradingagents",
+  "version": "0.1.0",
+  "description": "Multi-agent stock-trading research workflow for Claude Code — 4 analysts + bull/bear debate + trader + risk manager. Port of TauricResearch/TradingAgents to native Claude Code Agent Teams.",
+  "author": {
+    "name": "namikos",
+    "url": "https://github.com/namikos"
+  },
+  "homepage": "https://github.com/namikos/tradingagents",
+  "repository": "https://github.com/namikos/tradingagents",
+  "license": "Apache-2.0",
+  "keywords": [
+    "trading",
+    "stocks",
+    "finance",
+    "multi-agent",
+    "agent-teams",
+    "alpha-vantage",
+    "yfinance",
+    "research"
+  ],
+  "userConfig": {
+    "api_token": {
+      "type": "string",
+      "title": "Alpha Vantage API key",
+      "description": "Free key from https://www.alphavantage.co/support/#api-key (free tier = 25 requests/day; results cached locally for 1h).",
+      "sensitive": true,
+      "required": true,
+      "envVar": "ALPHA_VANTAGE_KEY"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "tradingagents": {
+      "command": "python",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/tools/mcp_server.py"],
+      "env": {
+        "ALPHA_VANTAGE_KEY": "${ALPHA_VANTAGE_KEY}",
+        "CLAUDE_PLUGIN_DATA": "${CLAUDE_PLUGIN_DATA}",
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

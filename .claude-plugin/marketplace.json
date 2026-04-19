@@ -1,0 +1,28 @@
+{
+  "name": "namikos-tradingagents",
+  "owner": {
+    "name": "namikos",
+    "url": "https://github.com/namikos"
+  },
+  "metadata": {
+    "description": "Multi-agent trading research workflow for Claude Code — port of TauricResearch/TradingAgents to native Agent Teams.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "tradingagents",
+      "source": ".",
+      "description": "Run a full multi-agent stock-analysis debate (4 analysts → bull/bear → trader → risk manager) on any ticker. Bring your own free Alpha Vantage API key.",
+      "version": "0.1.0",
+      "author": {
+        "name": "namikos",
+        "url": "https://github.com/namikos"
+      },
+      "homepage": "https://github.com/namikos/tradingagents",
+      "license": "Apache-2.0",
+      "category": "finance",
+      "keywords": ["trading", "stocks", "research", "agent-teams", "alpha-vantage"],
+      "strict": false
+    }
+  ]
+}

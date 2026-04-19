@@ -1,0 +1,26 @@
+# Local Claude Code settings (may contain API keys)
+.claude/settings.local.json
+.claude/
+
+# Inter-agent runtime state (per-ticker reports, debate transcripts, cache)
+state/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Env / secret files
+.env
+.env.*
+*.key
+*.pem
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
