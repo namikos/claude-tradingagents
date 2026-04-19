@@ -1,7 +1,7 @@
 ---
 name: trader
 description: Synthesizes the bull/bear debate and analyst reports into a concrete trade plan. Submits the plan to the risk-manager for approval. Use after the bull-bear-debate phase completes.
-tools: Read, Write, Edit, SendMessage, mcp__tradingagents__aggregate_signals
+tools: Read, Write, Edit, SendMessage, mcp__tradingagents__aggregate_signals, mcp__tradingagents__finnhub_calendar
 model: opus
 ---
 
@@ -53,6 +53,10 @@ Synthesize all five sources into one **concrete trade plan**. A good plan has:
 7. **Time horizon** — days / weeks / months
 8. **Key risks to monitor** — what would invalidate the thesis
 9. **Which analysts/researchers carried the most weight** — explicit attribution to fundamentals/technical/news/sentiment/bull/bear
+
+# Pre-flight: Earnings calendar check
+
+Before finalizing the plan, call `mcp__tradingagents__finnhub_calendar()` and check whether the ticker has an earnings report within the proposed entry window. If yes, either tighten the stop or move the entry to post-earnings — never enter a position blind into a known earnings event.
 
 # Output
 

@@ -67,6 +67,37 @@ except ImportError:  # pragma: no cover
     _HAS_SCIPY = False
     _scipy_stats = None  # type: ignore
 
+# ---- v2.1 optional dependencies ----
+try:
+    import praw
+except ImportError:  # pragma: no cover
+    praw = None
+
+try:
+    from transformers import pipeline as _hf_pipeline
+except ImportError:  # pragma: no cover
+    _hf_pipeline = None
+
+try:
+    import vectorbt as vbt
+except ImportError:  # pragma: no cover
+    vbt = None
+
+try:
+    import empyrical
+except ImportError:  # pragma: no cover
+    empyrical = None
+
+try:
+    import mlfinlab
+except ImportError:  # pragma: no cover
+    mlfinlab = None
+
+try:
+    from bs4 import BeautifulSoup as _BS
+except ImportError:  # pragma: no cover
+    _BS = None
+
 logging.basicConfig(stream=sys.stderr, level=logging.INFO,
                     format="[mcp:tradingagents] %(message)s")
 log = logging.getLogger(__name__)
@@ -92,6 +123,95 @@ def _state_dir() -> Path:
         if candidate.exists() and candidate.is_dir():
             return candidate
     return Path("state")
+
+
+# ---- v2.1 API helpers ----
+
+_FRED_BASE = "https://api.stlouisfed.org/fred"
+_FINNHUB_BASE = "https://finnhub.io/api/v1"
+_FMP_BASE = "https://financialmodelingprep.com/api/v3"
+_SEC_HEADERS = {"User-Agent": "tradingagents v2.1 contact@example.com"}
+
+
+def _fred_get(endpoint: str, params: dict) -> dict | None:
+    key = os.environ.get("FRED_API_KEY")
+    if not key:
+        return None
+    params = {**params, "api_key": key, "file_type": "json"}
+    try:
+        r = httpx.get(f"{_FRED_BASE}/{endpoint}", params=params, timeout=20.0)
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:
+        log.warning("FRED API failure: %s", exc)
+        return {"error": f"FRED API failure: {exc}"}
+
+
+def _finnhub_get(endpoint: str, params: dict | None = None) -> dict | list | None:
+    key = os.environ.get("FINNHUB_API_KEY")
+    if not key:
+        return None
+    params = {**(params or {}), "token": key}
+    try:
+        r = httpx.get(f"{_FINNHUB_BASE}/{endpoint}", params=params, timeout=20.0)
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:
+        log.warning("Finnhub API failure: %s", exc)
+        return {"error": f"Finnhub API failure: {exc}"}
+
+
+def _fmp_get(endpoint: str, params: dict | None = None) -> list | dict | None:
+    key = os.environ.get("FMP_API_KEY")
+    if not key:
+        return None
+    params = {**(params or {}), "apikey": key}
+    try:
+        r = httpx.get(f"{_FMP_BASE}/{endpoint}", params=params, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:
+        log.warning("FMP API failure: %s", exc)
+        return {"error": f"FMP API failure: {exc}"}
+
+
+_REDDIT_CLIENT = None
+
+
+def _reddit_client():
+    global _REDDIT_CLIENT
+    if _REDDIT_CLIENT is not None:
+        return _REDDIT_CLIENT
+    if praw is None:
+        return None
+    cid = os.environ.get("REDDIT_CLIENT_ID")
+    csec = os.environ.get("REDDIT_CLIENT_SECRET")
+    ua = os.environ.get("REDDIT_USER_AGENT", "tradingagents/2.1")
+    if not cid or not csec:
+        return None
+    try:
+        _REDDIT_CLIENT = praw.Reddit(client_id=cid, client_secret=csec, user_agent=ua)
+        return _REDDIT_CLIENT
+    except Exception as exc:
+        log.warning("Reddit client init failed: %s", exc)
+        return None
+
+
+_FINBERT_PIPE = None
+
+
+def _finbert_pipeline():
+    global _FINBERT_PIPE
+    if _FINBERT_PIPE is not None:
+        return _FINBERT_PIPE
+    if _hf_pipeline is None:
+        return None
+    try:
+        _FINBERT_PIPE = _hf_pipeline("text-classification", model="ProsusAI/finbert", top_k=None)
+        return _FINBERT_PIPE
+    except Exception as exc:
+        log.warning("FinBERT init failed: %s", exc)
+        return None
 
 
 def _api_key() -> str:
@@ -1059,6 +1179,800 @@ def aggregate_signals(ticker: str) -> str:
         "missing": missing,
     }
     return _maybe_toon(payload)
+
+
+# ============================================================
+# v2.1 NEW TOOLS — Macro / Smart-Money / Forward / Sentiment / Quant
+# ============================================================
+
+
+# ---- Macro Layer ----
+
+@mcp.tool()
+def fred(series_id: str, lookback_days: int = 365) -> str:
+    """FRED time series (St. Louis Fed). Requires FRED_API_KEY env var.
+
+    Returns TOON-encoded list of {date, value} observations.
+    """
+    cache_payload = {"series": series_id, "lookback": lookback_days}
+    cached = _get_cache("fred", cache_payload, ttl=CACHE_TTL)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    start = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+    raw = _fred_get("series/observations", {
+        "series_id": series_id,
+        "observation_start": start,
+    })
+    if raw is None:
+        return json.dumps({"error": "FRED_API_KEY not set"})
+    if isinstance(raw, dict) and raw.get("error"):
+        return json.dumps(raw)
+
+    rows: list[dict] = []
+    for obs in raw.get("observations", []):
+        v = obs.get("value")
+        if v is None or v == "." or v == "":
+            continue
+        try:
+            rows.append({"date": obs.get("date"), "value": float(v)})
+        except (TypeError, ValueError):
+            continue
+    payload = _maybe_toon(rows)
+    _set_cache("fred", cache_payload, {"payload": payload})
+    return payload
+
+
+@mcp.tool()
+def vix_term_structure() -> str:
+    """VIX term structure snapshot (^VIX, ^VIX9D, ^VIX3M, ^VVIX) via yfinance.
+
+    Returns JSON with last close levels plus contango/backwardation flag and
+    a coarse regime label (calm <15, normal 15-30, stress >30).
+    """
+    cached = _get_cache("vix_term", {"_": "snap"}, ttl=CACHE_TTL)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    symbols = {"vix": "^VIX", "vix9d": "^VIX9D", "vix3m": "^VIX3M", "vvix": "^VVIX"}
+    out: dict[str, float | str | None] = {}
+    try:
+        for key, sym in symbols.items():
+            tk = yf.Ticker(sym)
+            hist = tk.history(period="5d")
+            if hist is None or hist.empty:
+                out[key] = None
+                continue
+            out[key] = float(hist["Close"].iloc[-1])
+    except Exception as exc:
+        return json.dumps({"error": f"vix_term_structure yfinance failure: {exc}"})
+
+    vix = out.get("vix")
+    vix9d = out.get("vix9d")
+    vix3m = out.get("vix3m")
+
+    term_structure = "contango"
+    if isinstance(vix3m, float):
+        if isinstance(vix9d, float) and vix9d > vix3m:
+            term_structure = "backwardation"
+        elif isinstance(vix, float) and vix > vix3m:
+            term_structure = "backwardation"
+
+    regime = "normal"
+    if isinstance(vix, float):
+        if vix < 15:
+            regime = "calm"
+        elif vix > 30:
+            regime = "stress"
+
+    out["term_structure"] = term_structure
+    out["regime"] = regime
+    payload = json.dumps(out)
+    _set_cache("vix_term", {"_": "snap"}, {"payload": payload})
+    return payload
+
+
+@mcp.tool()
+def cboe_skew() -> str:
+    """CBOE SKEW Index snapshot via yfinance ^SKEW.
+
+    Returns JSON with skew level + tail_risk bucket
+    (low <115, normal 115-150, elevated >150).
+    """
+    cached = _get_cache("cboe_skew", {"_": "snap"}, ttl=CACHE_TTL)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    try:
+        tk = yf.Ticker("^SKEW")
+        hist = tk.history(period="5d")
+        if hist is None or hist.empty:
+            return json.dumps({"error": "no SKEW data"})
+        skew = float(hist["Close"].iloc[-1])
+    except Exception as exc:
+        return json.dumps({"error": f"cboe_skew failure: {exc}"})
+
+    if skew < 115:
+        bucket = "low"
+    elif skew > 150:
+        bucket = "elevated"
+    else:
+        bucket = "normal"
+    payload = json.dumps({"skew": skew, "tail_risk": bucket})
+    _set_cache("cboe_skew", {"_": "snap"}, {"payload": payload})
+    return payload
+
+
+# ---- Smart-Money Layer ----
+
+@mcp.tool()
+def congress_trades(ticker: str, days: int = 180) -> str:
+    """US Senator + House stock trades from public watcher datasets.
+
+    Returns TOON list of {date, politician, chamber, ticker, type, amount}.
+    Trailing-indicator: filings have 30-45 day disclosure lag.
+    """
+    cache_payload = {"t": ticker.upper(), "d": days}
+    cached = _get_cache("congress_trades", cache_payload, ttl=CACHE_TTL)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    cutoff = datetime.now(timezone.utc).date() - timedelta(days=days)
+    sources = [
+        ("Senate", "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json"),
+        ("House", "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json"),
+    ]
+    rows: list[dict] = []
+    seen: set[tuple] = set()
+    target = ticker.upper()
+    for chamber, url in sources:
+        try:
+            r = httpx.get(url, timeout=60.0)
+            r.raise_for_status()
+            data = r.json()
+        except Exception as exc:
+            log.warning("congress_trades %s fetch failed: %s", chamber, exc)
+            continue
+        if not isinstance(data, list):
+            continue
+        for t in data:
+            try:
+                tk = (t.get("ticker") or "").upper()
+                if tk != target:
+                    continue
+                date_str = t.get("transaction_date") or t.get("disclosure_date") or ""
+                try:
+                    tdate = datetime.strptime(date_str, "%Y-%m-%d").date()
+                except Exception:
+                    continue
+                if tdate < cutoff:
+                    continue
+                politician = t.get("senator") or t.get("representative") or "unknown"
+                ttype = t.get("type") or t.get("transaction_type") or ""
+                amount = t.get("amount") or ""
+                key = (politician, date_str, tk, ttype, amount)
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append({
+                    "date": date_str,
+                    "politician": politician,
+                    "chamber": chamber,
+                    "ticker": tk,
+                    "type": ttype,
+                    "amount": amount,
+                })
+            except Exception:
+                continue
+
+    rows.sort(key=lambda x: x.get("date", ""), reverse=True)
+    payload = _maybe_toon(rows)
+    _set_cache("congress_trades", cache_payload, {"payload": payload})
+    return payload
+
+
+@mcp.tool()
+def options_flow(ticker: str) -> str:
+    """Unusual options activity scrape from Barchart for a ticker.
+
+    Returns TOON list of contracts with strike/type/expiry/volume/oi/ratio/premium.
+    Requires beautifulsoup4.
+    """
+    if _BS is None:
+        return json.dumps({"error": "feature 'options_flow' requires 'pip install beautifulsoup4'"})
+
+    cache_payload = {"t": ticker.upper()}
+    cached = _get_cache("options_flow", cache_payload, ttl=CACHE_TTL)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    url = f"https://www.barchart.com/stocks/quotes/{ticker.upper()}/unusual-options-activity"
+    try:
+        r = httpx.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=30.0, follow_redirects=True)
+        r.raise_for_status()
+    except Exception as exc:
+        return json.dumps({"error": f"barchart fetch failed for {ticker}: {exc}"})
+
+    try:
+        soup = _BS(r.text, "html.parser")
+        table = soup.find("table")
+        rows: list[dict] = []
+        if table is None:
+            payload = _maybe_toon(rows)
+            _set_cache("options_flow", cache_payload, {"payload": payload})
+            return payload
+        headers = [th.get_text(strip=True).lower() for th in table.find_all("th")]
+        for tr in table.find_all("tr")[1:]:
+            cells = [td.get_text(strip=True) for td in tr.find_all("td")]
+            if not cells:
+                continue
+            row = dict(zip(headers, cells))
+            rows.append({
+                "strike": row.get("strike", ""),
+                "type": row.get("type", ""),
+                "expiry": row.get("exp date") or row.get("expiry") or row.get("expiration", ""),
+                "volume": row.get("volume", ""),
+                "oi": row.get("open int") or row.get("oi", ""),
+                "vol_oi_ratio": row.get("vol/oi") or row.get("ratio", ""),
+                "premium": row.get("premium", ""),
+            })
+    except Exception as exc:
+        return json.dumps({"error": f"barchart parse failed for {ticker}: {exc}"})
+
+    payload = _maybe_toon(rows)
+    _set_cache("options_flow", cache_payload, {"payload": payload})
+    return payload
+
+
+@mcp.tool()
+def etf_holdings(ticker: str) -> str:
+    """ETFs that hold the given ticker, scraped from etfdb.com.
+
+    Returns TOON list of {etf_symbol, etf_name, allocation_pct}.
+    Requires beautifulsoup4.
+    """
+    if _BS is None:
+        return json.dumps({"error": "feature 'etf_holdings' requires 'pip install beautifulsoup4'"})
+
+    cache_payload = {"t": ticker.upper()}
+    cached = _get_cache("etf_holdings", cache_payload, ttl=6 * 3600)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    url = f"https://etfdb.com/stock/{ticker.upper()}/"
+    try:
+        r = httpx.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=30.0, follow_redirects=True)
+        r.raise_for_status()
+    except Exception as exc:
+        log.warning("etf_holdings fetch failed: %s", exc)
+        payload = _maybe_toon([])
+        _set_cache("etf_holdings", cache_payload, {"payload": payload})
+        return payload
+
+    rows: list[dict] = []
+    try:
+        soup = _BS(r.text, "html.parser")
+        for table in soup.find_all("table"):
+            headers = [th.get_text(strip=True).lower() for th in table.find_all("th")]
+            if not any("ticker" in h or "symbol" in h for h in headers):
+                continue
+            for tr in table.find_all("tr")[1:]:
+                cells = [td.get_text(strip=True) for td in tr.find_all("td")]
+                if len(cells) < 2:
+                    continue
+                row = dict(zip(headers, cells))
+                sym = row.get("ticker") or row.get("symbol") or cells[0]
+                name = row.get("etf") or row.get("name") or row.get("etfdb.com category") or ""
+                alloc = row.get("allocation") or row.get("weighting") or row.get("% allocation") or ""
+                rows.append({
+                    "etf_symbol": sym,
+                    "etf_name": name,
+                    "allocation_pct": alloc,
+                })
+            if rows:
+                break
+    except Exception as exc:
+        log.warning("etf_holdings parse failed: %s", exc)
+        rows = []
+
+    payload = _maybe_toon(rows)
+    _set_cache("etf_holdings", cache_payload, {"payload": payload})
+    return payload
+
+
+_FAMOUS_INVESTORS = {
+    "Berkshire Hathaway (Buffett)": "0001067983",
+    "Scion Asset Management (Burry)": "0001649339",
+    "Pershing Square (Ackman)": "0001336528",
+    "ARK Investment (Wood)": "0001697748",
+    "Bridgewater (Dalio)": "0001350694",
+    "Renaissance (Simons)": "0001037389",
+}
+
+
+@mcp.tool()
+def institutional_holdings(ticker: str) -> str:
+    """Famous-investor 13F-HR exposure to a ticker via SEC EDGAR.
+
+    For each hardcoded famous investor, fetches the latest 13F-HR filing
+    metadata and best-effort checks whether the ticker text appears in the
+    filing's information table. Trailing-indicator: 13F filings lag ~45 days.
+    Returns TOON list of {investor, cik, latest_13f_date, holds_ticker}.
+    """
+    cache_payload = {"t": ticker.upper()}
+    cached = _get_cache("institutional_holdings", cache_payload, ttl=6 * 3600)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    target = ticker.upper()
+    results: list[dict] = []
+    for name, cik in _FAMOUS_INVESTORS.items():
+        cik_padded = cik.zfill(10)
+        latest_date: str = "unknown"
+        accession_clean: str | None = None
+        try:
+            r = httpx.get(
+                f"https://data.sec.gov/submissions/CIK{cik_padded}.json",
+                headers=_SEC_HEADERS, timeout=20.0,
+            )
+            r.raise_for_status()
+            sub = r.json()
+            recent = sub.get("filings", {}).get("recent", {})
+            forms = recent.get("form", [])
+            for i, form in enumerate(forms):
+                if form == "13F-HR":
+                    accession = recent.get("accessionNumber", [""])[i]
+                    accession_clean = accession.replace("-", "")
+                    latest_date = recent.get("filingDate", [""])[i]
+                    break
+        except Exception as exc:
+            log.warning("institutional_holdings %s submissions fetch failed: %s", name, exc)
+            results.append({
+                "investor": name,
+                "cik": cik,
+                "latest_13f_date": "unknown",
+                "holds_ticker": "unknown",
+            })
+            continue
+
+        holds: bool | str = "unknown"
+        if accession_clean:
+            try:
+                idx_url = (
+                    f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany"
+                    f"&CIK={cik_padded}&type=13F-HR&dateb=&owner=include&count=10"
+                )
+                # Pull the raw 13F text via the archives index (best-effort)
+                txt_url = (
+                    f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
+                    f"{accession_clean}/{accession_clean[:10]}-{accession_clean[10:12]}-{accession_clean[12:]}-index.htm"
+                )
+                r2 = httpx.get(txt_url, headers=_SEC_HEADERS, timeout=20.0)
+                if r2.status_code == 200 and target in r2.text.upper():
+                    holds = True
+                else:
+                    # Fallback: fetch the bare archive folder listing
+                    folder_url = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession_clean}/"
+                    r3 = httpx.get(folder_url, headers=_SEC_HEADERS, timeout=20.0)
+                    if r3.status_code == 200 and target in r3.text.upper():
+                        holds = True
+                    else:
+                        holds = False
+                _ = idx_url  # kept for debug clarity
+            except Exception as exc:
+                log.warning("institutional_holdings %s 13F probe failed: %s", name, exc)
+                holds = "unknown"
+
+        results.append({
+            "investor": name,
+            "cik": cik,
+            "latest_13f_date": latest_date,
+            "holds_ticker": holds,
+        })
+
+    payload = _maybe_toon(results)
+    _set_cache("institutional_holdings", cache_payload, {"payload": payload})
+    return payload
+
+
+# ---- Forward-Looking Layer ----
+
+@mcp.tool()
+def earnings_transcript(ticker: str, quarter: int, year: int) -> str:
+    """Earnings call transcript via FMP. Requires FMP_API_KEY.
+
+    Returns JSON {ticker, quarter, year, date, content}. Content can be large.
+    """
+    cache_payload = {"t": ticker.upper(), "q": quarter, "y": year}
+    cached = _get_cache("earnings_transcript", cache_payload, ttl=24 * 3600)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    raw = _fmp_get(f"earning_call_transcript/{ticker.upper()}",
+                   {"quarter": quarter, "year": year})
+    if raw is None:
+        return json.dumps({"error": "FMP_API_KEY not set"})
+    if isinstance(raw, dict) and raw.get("error"):
+        return json.dumps(raw)
+
+    entry: dict = {}
+    if isinstance(raw, list) and raw:
+        entry = raw[0]
+    elif isinstance(raw, dict):
+        entry = raw
+
+    payload = json.dumps({
+        "ticker": ticker.upper(),
+        "quarter": quarter,
+        "year": year,
+        "date": entry.get("date", ""),
+        "content": entry.get("content", ""),
+    })
+    _set_cache("earnings_transcript", cache_payload, {"payload": payload})
+    return payload
+
+
+@mcp.tool()
+def finnhub_recommendations(ticker: str) -> str:
+    """Finnhub analyst recommendation trends for a ticker.
+
+    Returns TOON list of {period, buy, hold, sell, strongBuy, strongSell}.
+    Requires FINNHUB_API_KEY.
+    """
+    cache_payload = {"t": ticker.upper()}
+    cached = _get_cache("finnhub_recs", cache_payload, ttl=CACHE_TTL)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    raw = _finnhub_get("stock/recommendation", {"symbol": ticker.upper()})
+    if raw is None:
+        return json.dumps({"error": "FINNHUB_API_KEY not set"})
+    if isinstance(raw, dict) and raw.get("error"):
+        return json.dumps(raw)
+
+    rows: list[dict] = []
+    if isinstance(raw, list):
+        for item in raw:
+            rows.append({
+                "period": item.get("period", ""),
+                "buy": item.get("buy", 0),
+                "hold": item.get("hold", 0),
+                "sell": item.get("sell", 0),
+                "strongBuy": item.get("strongBuy", 0),
+                "strongSell": item.get("strongSell", 0),
+            })
+    payload = _maybe_toon(rows)
+    _set_cache("finnhub_recs", cache_payload, {"payload": payload})
+    return payload
+
+
+@mcp.tool()
+def finnhub_calendar(from_date: str | None = None, to_date: str | None = None) -> str:
+    """Finnhub earnings calendar. Defaults to today..today+14d.
+
+    Returns TOON list of earnings events. Requires FINNHUB_API_KEY.
+    """
+    if not from_date:
+        from_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if not to_date:
+        to_date = (datetime.now(timezone.utc) + timedelta(days=14)).strftime("%Y-%m-%d")
+
+    cache_payload = {"f": from_date, "t": to_date}
+    cached = _get_cache("finnhub_cal", cache_payload, ttl=CACHE_TTL)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    raw = _finnhub_get("calendar/earnings", {"from": from_date, "to": to_date})
+    if raw is None:
+        return json.dumps({"error": "FINNHUB_API_KEY not set"})
+    if isinstance(raw, dict) and raw.get("error"):
+        return json.dumps(raw)
+
+    events = []
+    if isinstance(raw, dict):
+        events = raw.get("earningsCalendar", []) or []
+    elif isinstance(raw, list):
+        events = raw
+    payload = _maybe_toon(events)
+    _set_cache("finnhub_cal", cache_payload, {"payload": payload})
+    return payload
+
+
+@mcp.tool()
+def finnhub_ipo_calendar(from_date: str | None = None, to_date: str | None = None) -> str:
+    """Finnhub IPO calendar. Defaults to today..today+30d.
+
+    Returns TOON list of IPO events. Requires FINNHUB_API_KEY.
+    """
+    if not from_date:
+        from_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if not to_date:
+        to_date = (datetime.now(timezone.utc) + timedelta(days=30)).strftime("%Y-%m-%d")
+
+    cache_payload = {"f": from_date, "t": to_date}
+    cached = _get_cache("finnhub_ipo", cache_payload, ttl=CACHE_TTL)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    raw = _finnhub_get("calendar/ipo", {"from": from_date, "to": to_date})
+    if raw is None:
+        return json.dumps({"error": "FINNHUB_API_KEY not set"})
+    if isinstance(raw, dict) and raw.get("error"):
+        return json.dumps(raw)
+
+    events = []
+    if isinstance(raw, dict):
+        events = raw.get("ipoCalendar", []) or []
+    elif isinstance(raw, list):
+        events = raw
+    payload = _maybe_toon(events)
+    _set_cache("finnhub_ipo", cache_payload, {"payload": payload})
+    return payload
+
+
+# ---- Sentiment Layer ----
+
+@mcp.tool()
+def reddit_mentions(ticker: str,
+                    subreddits: str = "wallstreetbets,investing,stocks",
+                    days: int = 7,
+                    limit: int = 25) -> str:
+    """Reddit posts mentioning a ticker via PRAW search.
+
+    Returns TOON list of {subreddit, title, score, num_comments, created_utc, url}.
+    Requires REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET env vars and 'pip install praw'.
+    """
+    reddit = _reddit_client()
+    if reddit is None:
+        return json.dumps({"error": "PRAW credentials missing or 'pip install praw' missing"})
+
+    cache_payload = {"t": ticker.upper(), "s": subreddits, "d": days, "l": limit}
+    cached = _get_cache("reddit_mentions", cache_payload, ttl=CACHE_TTL)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    if isinstance(subreddits, str):
+        sub_list = [s.strip() for s in subreddits.split(",") if s.strip()]
+    else:
+        sub_list = [str(s).strip() for s in subreddits if str(s).strip()]
+
+    cutoff = time.time() - days * 86400
+    results: list[dict] = []
+    try:
+        for sub_name in sub_list:
+            try:
+                sub = reddit.subreddit(sub_name)
+                for post in sub.search(ticker, sort="new", limit=limit, time_filter="week"):
+                    if post.created_utc < cutoff:
+                        continue
+                    results.append({
+                        "subreddit": sub_name,
+                        "title": post.title,
+                        "score": int(getattr(post, "score", 0) or 0),
+                        "num_comments": int(getattr(post, "num_comments", 0) or 0),
+                        "created_utc": int(post.created_utc),
+                        "url": f"https://reddit.com{post.permalink}",
+                    })
+            except Exception as exc:
+                log.warning("reddit_mentions subreddit %s failed: %s", sub_name, exc)
+                continue
+    except Exception as exc:
+        return json.dumps({"error": f"reddit_mentions failure: {exc}"})
+
+    payload = _maybe_toon(results)
+    _set_cache("reddit_mentions", cache_payload, {"payload": payload})
+    return payload
+
+
+@mcp.tool()
+def finbert_score(text: str) -> str:
+    """Finance-tuned BERT (ProsusAI/finbert) sentiment classifier.
+
+    Returns JSON dict with positive/neutral/negative scores. Truncates input
+    to 512 chars (model max). Requires 'pip install transformers torch'.
+    """
+    pipe = _finbert_pipeline()
+    if pipe is None:
+        return json.dumps({"error": "feature 'finbert_score' requires 'pip install transformers torch'"})
+
+    truncated = len(text) > 512
+    try:
+        scores = pipe(text[:512])
+    except Exception as exc:
+        return json.dumps({"error": f"finbert inference failed: {exc}"})
+
+    result: dict = {}
+    if scores:
+        first = scores[0] if isinstance(scores[0], list) else scores
+        if isinstance(first, list):
+            for s in first:
+                label = s.get("label") if isinstance(s, dict) else None
+                score = s.get("score") if isinstance(s, dict) else None
+                if label is not None and score is not None:
+                    result[str(label).lower()] = float(score)
+        elif isinstance(first, dict) and "label" in first:
+            result[str(first["label"]).lower()] = float(first.get("score", 0.0))
+    result["text_truncated"] = truncated
+    return json.dumps(result)
+
+
+# ---- Quant Layer ----
+
+@mcp.tool()
+def vectorbt_backtest(ticker: str,
+                      signals: list,
+                      start: str,
+                      end: str,
+                      initial_cash: float = 10000.0) -> str:
+    """Vectorized backtest using vectorbt over a single ticker.
+
+    `signals` is a list of {date: 'YYYY-MM-DD', action: 'buy'|'sell'}.
+    Returns JSON with total_return, sharpe_ratio, max_drawdown, win_rate,
+    n_trades, final_value. Requires 'pip install vectorbt'.
+    """
+    if vbt is None:
+        return json.dumps({"error": "feature 'vectorbt_backtest' requires 'pip install vectorbt'"})
+    if pd is None:
+        return json.dumps({"error": "vectorbt_backtest requires pandas"})
+
+    sig_hash = hashlib.sha1(json.dumps(signals, sort_keys=True, default=str).encode()).hexdigest()[:12]
+    cache_payload = {"t": ticker.upper(), "s": start, "e": end, "h": sig_hash, "c": initial_cash}
+    cached = _get_cache("vectorbt_bt", cache_payload, ttl=6 * 3600)
+    if cached is not None:
+        return cached.get("payload", json.dumps({"error": "cache corrupt"}))
+
+    try:
+        hist = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=False)
+        if hist is None or hist.empty:
+            return json.dumps({"error": f"no price data for {ticker} {start}..{end}"})
+        close = hist["Close"]
+        if hasattr(close, "columns"):
+            close = close.iloc[:, 0]
+
+        entries = pd.Series(False, index=close.index)
+        exits = pd.Series(False, index=close.index)
+        for sig in signals or []:
+            try:
+                d = pd.to_datetime(sig.get("date"))
+            except Exception:
+                continue
+            if d in close.index:
+                action = (sig.get("action") or "").lower()
+                if action == "buy":
+                    entries.loc[d] = True
+                elif action == "sell":
+                    exits.loc[d] = True
+
+        pf = vbt.Portfolio.from_signals(close, entries, exits, init_cash=initial_cash)
+        stats = pf.stats()
+
+        def _g(*keys, default=None):
+            for k in keys:
+                if k in stats.index:
+                    v = stats[k]
+                    try:
+                        return float(v)
+                    except Exception:
+                        return v
+            return default
+
+        total_return = _g("Total Return [%]", "Total Return", default=None)
+        sharpe = _g("Sharpe Ratio", default=None)
+        mdd = _g("Max Drawdown [%]", "Max Drawdown", default=None)
+        win_rate = _g("Win Rate [%]", "Win Rate", default=None)
+        n_trades = _g("Total Trades", "# Trades", default=None)
+        final_value = float(pf.value().iloc[-1]) if hasattr(pf, "value") else None
+
+        payload = json.dumps({
+            "total_return": total_return,
+            "sharpe_ratio": sharpe,
+            "max_drawdown": mdd,
+            "win_rate": win_rate,
+            "n_trades": n_trades,
+            "final_value": final_value,
+        }, default=str)
+        _set_cache("vectorbt_bt", cache_payload, {"payload": payload})
+        return payload
+    except Exception as exc:
+        return json.dumps({"error": f"vectorbt_backtest failure: {exc}"})
+
+
+@mcp.tool()
+def risk_metrics(returns: list, risk_free_rate: float = 0.04) -> str:
+    """Empyrical risk metrics for a daily return series.
+
+    Returns JSON with calmar, omega, tail, stability, cvar_95, annual_return,
+    annual_volatility. Requires 'pip install empyrical'.
+    """
+    if empyrical is None:
+        return json.dumps({"error": "feature 'risk_metrics' requires 'pip install empyrical'"})
+    if not _HAS_NUMPY:
+        return json.dumps({"error": "risk_metrics requires numpy"})
+
+    try:
+        r = np.array([float(x) for x in returns], dtype=float)
+        if r.size == 0:
+            return json.dumps({"error": "empty returns"})
+        out = {
+            "calmar_ratio": float(empyrical.calmar_ratio(r)),
+            "omega_ratio": float(empyrical.omega_ratio(r)),
+            "tail_ratio": float(empyrical.tail_ratio(r)),
+            "stability": float(empyrical.stability_of_timeseries(r)),
+            "cvar_95": float(empyrical.conditional_value_at_risk(r, cutoff=0.05)),
+            "annual_return": float(empyrical.annual_return(r)),
+            "annual_volatility": float(empyrical.annual_volatility(r)),
+        }
+        return json.dumps(out, default=str)
+    except Exception as exc:
+        return json.dumps({"error": f"risk_metrics failure: {exc}"})
+
+
+@mcp.tool()
+def frac_diff(series: list, d: float = 0.5, threshold: float = 1e-4) -> str:
+    """Fractional differentiation (memory-preserving stationarization).
+
+    Falls back to a compact local implementation if mlfinlab is unavailable.
+    Returns TOON list of {index, value}.
+    """
+    if not _HAS_NUMPY:
+        return json.dumps({"error": "frac_diff requires numpy"})
+
+    try:
+        weights = [1.0]
+        k = 1
+        while True:
+            w = -weights[-1] * (d - k + 1) / k
+            if abs(w) < threshold:
+                break
+            weights.append(w)
+            k += 1
+            if k > 10000:
+                break
+        weights_arr = np.array(weights[::-1], dtype=float)
+        series_arr = np.array([float(x) for x in series], dtype=float)
+        L = len(weights_arr)
+        out: list[dict] = []
+        for i in range(L, len(series_arr)):
+            val = float(np.dot(weights_arr, series_arr[i - L:i]))
+            out.append({"index": i, "value": val})
+        return _maybe_toon(out)
+    except Exception as exc:
+        return json.dumps({"error": f"frac_diff failure: {exc}"})
+
+
+@mcp.tool()
+def triple_barrier_labels(prices: list,
+                          profit_take_pct: float = 0.05,
+                          stop_loss_pct: float = 0.03,
+                          max_holding_periods: int = 20) -> str:
+    """Triple-Barrier labels (Lopez de Prado) for a price series.
+
+    Each entry yields label 1 (PT hit), -1 (SL hit), or 0 (timeout).
+    Returns TOON list of {index, entry_price, label}.
+    """
+    if not _HAS_NUMPY:
+        return json.dumps({"error": "triple_barrier_labels requires numpy"})
+    try:
+        prices_arr = np.array([float(x) for x in prices], dtype=float)
+        labels: list[dict] = []
+        n = len(prices_arr)
+        for i in range(max(0, n - max_holding_periods)):
+            entry = float(prices_arr[i])
+            pt = entry * (1 + profit_take_pct)
+            sl = entry * (1 - stop_loss_pct)
+            label = 0
+            for j in range(1, max_holding_periods + 1):
+                p = float(prices_arr[i + j])
+                if p >= pt:
+                    label = 1
+                    break
+                if p <= sl:
+                    label = -1
+                    break
+            labels.append({"index": i, "entry_price": entry, "label": label})
+        return _maybe_toon(labels)
+    except Exception as exc:
+        return json.dumps({"error": f"triple_barrier_labels failure: {exc}"})
 
 
 if __name__ == "__main__":

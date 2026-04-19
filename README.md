@@ -1,4 +1,4 @@
-# TradingAgents — Substanz Edition (v2.0)
+# TradingAgents — Substanz Edition (v2.1)
 
 A Claude Code plugin that runs a **substance-maximizing, multi-perspective stock
 research workflow** on any ticker. 4 base analysts run in parallel, then 13
@@ -127,6 +127,12 @@ pip install -r ${CLAUDE_PLUGIN_ROOT}/tools/requirements.txt
 
 This installs `mcp[cli]`, `httpx`, `yfinance`, `pandas`, `numpy`, `scipy`.
 
+Optional — install heavy quant dependencies (~3GB, only if you use FinBERT/vectorbt/empyrical/mlfinlab):
+
+```bash
+pip install -r tools/requirements-quant.txt
+```
+
 ### 4. (Optional) Run the read-only dashboard
 
 ```bash
@@ -144,7 +150,7 @@ analyses via `/analyze`, `/deep`, etc. in Claude Code.
 
 ## Quantitative tools (MCP)
 
-The bundled MCP server (`tools/mcp_server.py`) exposes 23 tools, callable by
+The bundled MCP server (`tools/mcp_server.py`) exposes 37 tools, callable by
 agents as `mcp__tradingagents__<name>`:
 
 ### Data sources
@@ -161,6 +167,31 @@ agents as `mcp__tradingagents__<name>`:
 - `sharpe_ratio`, `sortino_ratio`, `max_drawdown` — performance metrics
 - `historical_price` — closing price on any past date (drives backtester)
 - `factor_exposure` — beta to SPY + sector correlation
+
+### v2.1 — Datentiefe (37 Tools total)
+
+**Macro layer** (NEW v2.1):
+- `fred(series_id, lookback_days)` — St. Louis Fed time series
+- `vix_term_structure()`, `cboe_skew()` — fear gauge & tail-risk indicators
+
+**Smart-Money layer** (NEW v2.1):
+- `congress_trades(ticker)` — Senator/House-Member trades (45-day disclosure)
+- `options_flow(ticker)` — unusual options activity (Barchart)
+- `etf_holdings(ticker)` — which ETFs hold this ticker
+- `institutional_holdings(ticker)` — 13F-HR filings (45-day lag)
+
+**Forward-Looking layer** (NEW v2.1):
+- `earnings_transcript(ticker, quarter, year)` — full earnings call transcript (FMP)
+- `finnhub_recommendations(ticker)`, `finnhub_calendar()`, `finnhub_ipo_calendar()`
+
+**Sentiment layer** (NEW v2.1):
+- `reddit_mentions(ticker, subreddits, days)` — PRAW-based subreddit search
+- `finbert_score(text)` — finance-specific BERT sentiment classifier (lokal, ~440MB)
+
+**Quant layer** (NEW v2.1):
+- `vectorbt_backtest(ticker, signals, start, end)` — vectorized portfolio backtest
+- `risk_metrics(returns)` — Calmar, Omega, Tail-Ratio, Stability, CVaR (empyrical)
+- `frac_diff(series, d)`, `triple_barrier_labels(...)` — López de Prado methods (mlfinlab)
 
 ---
 

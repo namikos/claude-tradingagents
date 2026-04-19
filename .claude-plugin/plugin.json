@@ -1,7 +1,7 @@
 {
   "name": "tradingagents",
-  "version": "2.0.0",
-  "description": "Substanz Edition v2 — 4 analysts + 13 famous-investor personas (Buffett/Burry/Wood/…) + bull/bear debate + trader + risk manager + DCF/Kelly/ATR/Sharpe quant tools + backtester + read-only Next.js dashboard. Multi-mode (quick/standard/deep), multi-style (value/growth/macro/contrarian/council). v2 ships TOON-encoded MCP tabular outputs (history/technical) and a single-call signal-aggregator for the trader, cutting per-run tokens ~10% on /deep.",
+  "version": "2.1.0",
+  "description": "Substanz Edition v2.1 — 4 analysts + 13 famous-investor personas + bull/bear debate + trader + risk manager + DCF/Kelly/ATR/Sharpe quant tools + backtester + read-only Next.js dashboard. v2.1 adds Macro (FRED/VIX), Smart-Money (Congress trades, 13F filings, options flow, ETF holdings), Forward-Looking (earnings transcripts, Finnhub analyst recs/calendar), Sentiment (PRAW + FinBERT) and Quant (vectorbt + empyrical + mlfinlab) layers — 37 MCP tools total.",
   "author": {
     "name": "namikos",
     "url": "https://github.com/namikos"
@@ -30,6 +30,42 @@
       "type": "string",
       "title": "Financial Datasets API key (optional)",
       "description": "Optional — premium fundamentals via https://financialdatasets.ai. Leave empty to use only Alpha Vantage + yfinance.",
+      "sensitive": true
+    },
+    "fred_api_token": {
+      "type": "string",
+      "title": "FRED API key (optional)",
+      "description": "Free at https://fred.stlouisfed.org/docs/api/api_key.html — for `fred()` macro tool.",
+      "sensitive": true
+    },
+    "fmp_api_token": {
+      "type": "string",
+      "title": "Financial Modeling Prep API key (optional)",
+      "description": "Free tier 250/day at https://site.financialmodelingprep.com/developer — for `earnings_transcript()`.",
+      "sensitive": true
+    },
+    "finnhub_api_token": {
+      "type": "string",
+      "title": "Finnhub API key (optional)",
+      "description": "Free 60/min at https://finnhub.io — for analyst recommendations + earnings/IPO calendar.",
+      "sensitive": true
+    },
+    "reddit_client_id": {
+      "type": "string",
+      "title": "Reddit OAuth Client ID (optional)",
+      "description": "Register app at https://www.reddit.com/prefs/apps — for `reddit_mentions()` PRAW tool.",
+      "sensitive": true
+    },
+    "reddit_client_secret": {
+      "type": "string",
+      "title": "Reddit OAuth Client Secret (optional)",
+      "description": "Paired with `reddit_client_id` for PRAW authentication.",
+      "sensitive": true
+    },
+    "reddit_user_agent": {
+      "type": "string",
+      "title": "Reddit User-Agent (optional)",
+      "description": "Required by Reddit API. Format: `tradingagents/2.1 by /u/yourusername`. NOT sensitive but include for completeness.",
       "sensitive": true
     }
   }

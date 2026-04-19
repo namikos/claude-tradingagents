@@ -6,6 +6,12 @@
       "env": {
         "ALPHA_VANTAGE_KEY": "${user_config.api_token}",
         "FINANCIAL_DATASETS_API_KEY": "${user_config.fds_api_token}",
+        "FRED_API_KEY": "${user_config.fred_api_token}",
+        "FMP_API_KEY": "${user_config.fmp_api_token}",
+        "FINNHUB_API_KEY": "${user_config.finnhub_api_token}",
+        "REDDIT_CLIENT_ID": "${user_config.reddit_client_id}",
+        "REDDIT_CLIENT_SECRET": "${user_config.reddit_client_secret}",
+        "REDDIT_USER_AGENT": "${user_config.reddit_user_agent}",
         "CLAUDE_PLUGIN_DATA": "${CLAUDE_PLUGIN_DATA}",
         "PYTHONUNBUFFERED": "1"
       }

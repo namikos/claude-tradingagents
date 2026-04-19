@@ -1,4 +1,4 @@
-# TradingAgents — Substanz Edition (v2.0) — Claude Code Plugin
+# TradingAgents — Substanz Edition (v2.1) — Claude Code Plugin
 
 This is a Claude-Code-native multi-agent stock-trading research framework.
 Port of [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)
@@ -7,7 +7,7 @@ extended with the [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fu
 
 Distributed as a Claude Code plugin: `agents/`, `agents/personas/`, `skills/`,
 `commands/` live at the plugin root, plus an MCP server (`tools/mcp_server.py`)
-exposing 23 tools.
+exposing 37 tools.
 
 ## Architecture
 
@@ -125,7 +125,7 @@ The trader and risk-manager files end with the literal line:
 ## Tools (MCP server `tradingagents`)
 
 The `tools/mcp_server.py` FastMCP server is registered in `.mcp.json` and
-exposes 23 tools (each must be in the agent's `tools:` whitelist as
+exposes 37 tools (each must be in the agent's `tools:` whitelist as
 `mcp__tradingagents__<name>`):
 
 ### Data sources (Alpha Vantage)
@@ -148,6 +148,36 @@ exposes 23 tools (each must be in the agent's `tools:` whitelist as
 
 Responses cached on disk (`${CLAUDE_PLUGIN_DATA}/cache/` or `state/cache/`)
 for 1h (data) / 6h (SEC filings).
+
+### v2.1 — Datentiefe (NEW, +14 tools → 37 total)
+
+**Macro:**
+- `fred(series_id, lookback_days)` — St. Louis Fed time series
+- `vix_term_structure()` — VIX1D/VIX/VIX3M/VIX6M curve (contango/backwardation)
+- `cboe_skew()` — CBOE SKEW tail-risk index
+
+**Smart-Money:**
+- `congress_trades(ticker)` — Senator/House trades (45-day disclosure)
+- `options_flow(ticker)` — unusual options activity (Barchart scrape)
+- `etf_holdings(ticker)` — ETFs holding this ticker
+- `institutional_holdings(ticker)` — 13F-HR filings
+
+**Forward-Looking:**
+- `earnings_transcript(ticker, quarter, year)` — full call transcript (FMP)
+- `finnhub_recommendations(ticker)` — analyst buy/hold/sell consensus
+- `finnhub_calendar()` — upcoming earnings calendar
+- `finnhub_ipo_calendar()` — upcoming IPOs
+
+**Sentiment:**
+- `reddit_mentions(ticker, subreddits, days)` — PRAW subreddit search
+- `finbert_score(text)` — finance-domain BERT classifier (lokal, ~440MB)
+
+**Quant (heavy deps; see `tools/requirements-quant.txt`):**
+- `vectorbt_backtest(ticker, signals, start, end)` — vectorized backtest
+- `risk_metrics(returns)` — Calmar/Omega/Tail-Ratio/CVaR (empyrical)
+- `frac_diff(series, d)`, `triple_barrier_labels(...)` — López de Prado (mlfinlab)
+
+**Persona uplift in v2.1:** Druckenmiller and Damodaran gain `fred` + `vix_term_structure`; Burry and Ackman gain `congress_trades` + `options_flow` + `institutional_holdings`; Wood and Lynch gain `etf_holdings` + `finnhub_recommendations`; all personas can pull `earnings_transcript` for forward-looking guidance.
 
 ### WebSearch / WebFetch
 Native Claude Code tools. News + Sentiment analysts use them for breaking

@@ -32,9 +32,11 @@ Use this lookup for the cost/ETA values:
 
 | Mode | Estimated cost | ETA |
 |---|---|---|
-| quick | $1–2 | 2–3 min |
-| standard | $3–5 | 6–8 min |
-| deep | $7–15 | 10–15 min |
+| quick | $1–2 (+10% wenn FinBERT lokal aktiv — Sentiment-Stack v2.1) | 2–3 min |
+| standard | $3–5 (+10% wenn FinBERT lokal aktiv — Sentiment-Stack v2.1) | 6–8 min |
+| deep | $7–15 (+10% wenn FinBERT lokal aktiv — Sentiment-Stack v2.1) | 10–15 min |
+
+> **v2.1 Note:** Wenn `finbert_score` MCP-Tool genutzt wird, erste Aktivierung lädt 440MB FinBERT-Modell. Cold-Start +30s, danach cached. Run-Cost +5–10%.
 
 ### Mode → which analysts to spawn
 

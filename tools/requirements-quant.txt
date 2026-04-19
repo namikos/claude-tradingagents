@@ -1,0 +1,13 @@
+# Optional heavy dependencies for v2.1 quant-stack tools
+# Install with: pip install -r tools/requirements-quant.txt
+# ~3GB footprint (torch dominant). Skip if you don't use:
+#   - finbert_score (transformers, torch)
+#   - vectorbt_backtest (vectorbt)
+#   - risk_metrics (empyrical)
+#   - frac_diff, triple_barrier_labels (mlfinlab)
+
+transformers>=4.35.0
+torch>=2.0.0
+vectorbt>=0.26.0
+empyrical>=0.5.5
+mlfinlab>=2.0.0

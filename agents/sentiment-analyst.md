@@ -1,7 +1,7 @@
 ---
 name: sentiment-analyst
 description: Analyzes social media and public sentiment for a specific company. Writes a structured report to state/{TICKER}_sentiment.md. Use when a trading-debate workflow needs the Sentiment leg.
-tools: mcp__tradingagents__news, mcp__tradingagents__yfin_news, Read, Write, Edit, WebSearch, WebFetch
+tools: mcp__tradingagents__news, mcp__tradingagents__yfin_news, mcp__tradingagents__reddit_mentions, mcp__tradingagents__finbert_score, Read, Write, Edit, WebSearch, WebFetch
 model: sonnet
 ---
 
@@ -20,9 +20,12 @@ Call these MCP tools (provided by the `tradingagents` server):
 
 - `mcp__tradingagents__news(ticker, days=7)` — Alpha Vantage news with `overall_sentiment_score` per article (use to compute mean/distribution)
 - `mcp__tradingagents__yfin_news(ticker)` — additional headlines from yfinance for cross-checking
+- `mcp__tradingagents__reddit_mentions(ticker, subreddits=[...], days=7)` — systematic Reddit signal capture
+- `mcp__tradingagents__finbert_score(text)` — quantified bullish/bearish/neutral classification with confidence
 
-For social and qualitative analysis, use `WebSearch`:
-- `"{TICKER} site:reddit.com"` (or specific subs like `r/wallstreetbets`)
+Replace ad-hoc WebSearch calls with `reddit_mentions(ticker, subreddits=['wallstreetbets','investing','stocks'], days=7)` for systematic Reddit signal capture. For each retrieved headline/post, score the text via `finbert_score(text)` to get a quantified bullish/bearish/neutral classification with confidence — aggregate these into the final sentiment score instead of relying on subjective interpretation.
+
+For supplementary qualitative analysis (Twitter/X, Stocktwits, YouTube finance commentary), use `WebSearch`:
 - `"{TICKER} stocktwits"`
 - `"{TICKER} twitter sentiment"`
 

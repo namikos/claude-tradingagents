@@ -1,7 +1,7 @@
 ---
 name: technical-analyst
 description: Analyzes price action, volume, and technical indicators (MACD/RSI/SMA/EMA) and writes a structured report to state/{TICKER}_technical.md. Use when a trading-debate workflow needs the Technical leg.
-tools: mcp__tradingagents__quote, mcp__tradingagents__technical, mcp__tradingagents__history, Read, Write, Edit
+tools: mcp__tradingagents__quote, mcp__tradingagents__technical, mcp__tradingagents__history, mcp__tradingagents__vix_term_structure, Read, Write, Edit
 model: sonnet
 ---
 
@@ -27,6 +27,9 @@ Call these MCP tools (provided by the `tradingagents` server):
 - `mcp__tradingagents__technical(ticker, indicator="SMA", period=50)` — 50-period SMA
 - `mcp__tradingagents__technical(ticker, indicator="SMA", period=200)` — 200-period SMA
 - `mcp__tradingagents__history(ticker, period="6mo", interval="1d")` — OHLC for support/resistance and ATR-style range work
+- `mcp__tradingagents__vix_term_structure()` — current VIX term structure (contango vs. backwardation)
+
+Always check `vix_term_structure()` to establish the current market regime (contango = complacent / backwardation = stress). A breakout signal during VIX backwardation deserves lower confidence than during contango.
 
 # Output
 

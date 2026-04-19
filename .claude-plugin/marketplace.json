@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Multi-agent trading research workflow for Claude Code — port of TauricResearch/TradingAgents extended with virattt/ai-hedge-fund persona pattern.",
-    "version": "2.0.0"
+    "version": "2.1.0"
   },
   "plugins": [
     {
@@ -14,8 +14,8 @@
         "source": "url",
         "url": "https://github.com/namikos/claude-tradingagents.git"
       },
-      "description": "Substanz Edition v2 — 4 analysts + 13 famous-investor personas + bull/bear debate + trader + risk manager + DCF/Kelly/ATR/Sharpe quant tools + backtester + read-only Next.js dashboard. v2 adds TOON token-optimized MCP outputs and a one-call signal aggregator.",
-      "version": "2.0.0",
+      "description": "Substanz Edition v2.1 — 4 analysts + 13 famous-investor personas + bull/bear debate + trader + risk manager. 41 MCP tools: DCF/Kelly/ATR/Sharpe + v2.1 layers (FRED macro, congress trades, 13F holdings, options flow, Finnhub analyst recs/earnings calendar, FMP earnings transcripts, PRAW Reddit, FinBERT sentiment, vectorbt backtests, empyrical risk metrics, mlfinlab labels). Includes backtester + read-only Next.js dashboard.",
+      "version": "2.1.0",
       "author": {
         "name": "namikos"
       },

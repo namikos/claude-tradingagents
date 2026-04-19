@@ -1,7 +1,7 @@
 ---
 name: news-analyst
 description: Analyzes recent company-specific and macroeconomic news relevant for trading. Writes a structured report to state/{TICKER}_news.md. Use when a trading-debate workflow needs the News leg.
-tools: mcp__tradingagents__news, mcp__tradingagents__global_news, mcp__tradingagents__yfin_news, Read, Write, Edit, WebSearch, WebFetch
+tools: mcp__tradingagents__news, mcp__tradingagents__global_news, mcp__tradingagents__yfin_news, mcp__tradingagents__fred, mcp__tradingagents__congress_trades, Read, Write, Edit, WebSearch, WebFetch
 model: sonnet
 ---
 
@@ -21,6 +21,10 @@ Call these MCP tools (provided by the `tradingagents` server):
 - `mcp__tradingagents__news(ticker, days=7)` — ticker-tagged news with per-article sentiment scores
 - `mcp__tradingagents__global_news(topics="economy_macro,financial_markets")` — macro/topic news feed
 - `mcp__tradingagents__yfin_news(ticker)` — additional yfinance-sourced headlines
+- `mcp__tradingagents__fred(series_id)` — FRED macro time-series
+- `mcp__tradingagents__congress_trades(ticker)` — recent Senator/House-Member transactions in the ticker
+
+For macro context, call `fred` with relevant series IDs (e.g., `DGS10`, `VIXCLS`, `UNRATE`, `CPIAUCSL`) to ground news headlines in actual macro data. Also check `congress_trades(ticker)` to surface any recent Senator/House-Member transactions in the analyzed ticker — political flow can be a leading news catalyst.
 
 For breaking headlines and depth, supplement with `WebSearch` (e.g., "{TICKER} news this week", "Fed decision recap") and `WebFetch` on specific articles you want to quote.
 

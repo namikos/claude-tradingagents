@@ -1,7 +1,7 @@
 ---
 name: trading-backtest
 description: Backtest the trading-debate workflow on historical data. Walks N trading days at a chosen step, runs a lite analysis at each, simulates trades from the resulting signals, then computes Sharpe/Sortino/Max-Drawdown/Win-rate.
-allowed-tools: Agent, Read, Write, Edit, mcp__tradingagents__historical_price, mcp__tradingagents__sharpe_ratio, mcp__tradingagents__sortino_ratio, mcp__tradingagents__max_drawdown
+allowed-tools: Agent, Read, Write, Edit, mcp__tradingagents__historical_price, mcp__tradingagents__sharpe_ratio, mcp__tradingagents__sortino_ratio, mcp__tradingagents__max_drawdown, mcp__tradingagents__vectorbt_backtest
 ---
 
 # Trading Backtest Orchestrator
@@ -19,8 +19,39 @@ Parse `$ARGUMENTS` (positional + flags):
 - `--style value|growth|macro|contrarian|quick` — default `quick`.
 - `--initial-capital N` — default `100000`.
 - `--position-size-pct N` — default `10` (percent of capital per trade).
+- `--engine lite|vectorbt` — default `lite` (backwards-compat). Selects the simulation engine — see **Engine Selection** below.
 
 If any required field is missing, abort with a one-line usage example.
+
+### Example invocations
+
+```
+/backtest AAPL --from 2024-01-01 --to 2024-06-30
+/backtest AAPL --from 2024-01-01 --to 2024-06-30 --engine vectorbt
+/backtest NVDA --from 2024-01-01 --to 2024-12-31 --step 10d --style growth --engine vectorbt
+```
+
+## Engine Selection
+
+| Engine | Speed | Portfolio logic | When to use |
+|---|---|---|---|
+| `lite` (default) | Slower (one analyst-spawn pass per iteration) | Single-position long-only, fixed pct sizing, 0.1% fee, no slippage modelling | Default. Backwards-compatible with v1.x runs. Best when you also want the analyst signal trail to inspect. |
+| `vectorbt` | Millisecond-fast (vectorized over the whole window) | Full portfolio logic — multi-position, configurable slippage/fees, exact compounding, drawdown bookkeeping done in C | Use when you have a long window, many iterations, or want production-grade portfolio metrics. Skips per-iteration analyst spawn — signals are computed once and replayed in `vectorbt`. |
+
+The `lite` engine runs the per-iteration **Lite Workflow** below (analyst spawns, persona votes, trader-lite synthesis), then walks the **Trade Simulation** loop in Python-style pseudocode.
+
+The `vectorbt` engine still runs the per-iteration **Lite Workflow** to produce the per-date `(action, conf)` signal series, but instead of stepping the manual simulation loop it hands the signals off to:
+
+```
+mcp__tradingagents__vectorbt_backtest(
+    ticker={TICKER},
+    signals=[{"date": T, "action": "BUY|HOLD|SELL", "confidence": N}, ...],
+    start={from},
+    end={to},
+)
+```
+
+The MCP tool returns the equity curve, trade log, and Sharpe/Sortino/Max-DD/Win-rate already computed — skip the **Performance Computation** step and feed those values straight into the **Output** template.
 
 ## Cost Banner
 
