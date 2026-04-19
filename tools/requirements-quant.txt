@@ -9,5 +9,7 @@
 transformers>=4.35.0
 torch>=2.0.0
 vectorbt>=0.26.0
-empyrical>=0.5.5
+# upstream `empyrical` is unmaintained and breaks on Python 3.12+
+# (uses removed configparser.SafeConfigParser). Use community fork.
+empyrical-reloaded>=0.5.10
 mlfinlab>=2.0.0
