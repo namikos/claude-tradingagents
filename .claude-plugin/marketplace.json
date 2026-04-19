@@ -1,8 +1,7 @@
 {
   "name": "namikos-tradingagents",
   "owner": {
-    "name": "namikos",
-    "email": "os.namik@gmail.com"
+    "name": "namikos"
   },
   "metadata": {
     "description": "Multi-agent trading research workflow for Claude Code — port of TauricResearch/TradingAgents extended with virattt/ai-hedge-fund persona pattern.",
@@ -19,8 +18,7 @@
       "description": "Substanz Edition — 4 analysts + 13 famous-investor personas + bull/bear debate + trader + risk manager + DCF/Kelly/ATR/Sharpe quant tools + backtester + read-only Next.js dashboard. Quick/standard/deep modes × value/growth/macro/contrarian/council styles.",
       "version": "1.0.0",
       "author": {
-        "name": "namikos",
-        "email": "os.namik@gmail.com"
+        "name": "namikos"
       },
       "homepage": "https://github.com/namikos/claude-tradingagents",
       "repository": "https://github.com/namikos/claude-tradingagents",
